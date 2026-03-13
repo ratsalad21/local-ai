@@ -1,7 +1,33 @@
-version: "3"
+version: "3.9"
 
 services:
-  ai-ui:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-server
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - "G:/AI/vllm/cache:/root/.cache/huggingface"
+    command: >
+      --model Qwen/Qwen2.5-32B-Instruct
+      --dtype bf16
+      --gpu-memory-utilization 0.85
+      --max-model-len 16384
+
+  chat-ui:
     build: .
+    container_name: local-chat-ui
     ports:
       - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      - VLLM_API_BASE=http://vllm:8000/v1
+      - MODEL_NAME=Qwen/Qwen2.5-32B-Instruct
+    depends_on:
+      - vllm

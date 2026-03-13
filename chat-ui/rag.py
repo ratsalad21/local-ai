@@ -1,26 +1,29 @@
+# rag.py
 import chromadb
+from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
-client = chromadb.Client()
-collection = client.get_or_create_collection("docs")
+client = chromadb.PersistentClient(
+    path="chroma_db",
+    settings=Settings(allow_reset=True)
+)
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+collection = client.get_or_create_collection("documents")
+embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-def add_document(text):
-    embedding = model.encode(text).tolist()
-
+def add_document(text: str, doc_id: str):
+    embedding = embedder.encode([text])[0].tolist()
     collection.add(
+        ids=[doc_id],
         documents=[text],
         embeddings=[embedding],
-        ids=[str(hash(text))]
     )
 
-def search_docs(query):
-    embedding = model.encode(query).tolist()
-
+def query_documents(query: str, k: int = 3):
+    q_emb = embedder.encode([query])[0].tolist()
     results = collection.query(
-        query_embeddings=[embedding],
-        n_results=3
+        query_embeddings=[q_emb],
+        n_results=k,
     )
-
-    return results["documents"]
+    docs = results.get("documents", [[]])[0]
+    return "\n\n".join(docs)

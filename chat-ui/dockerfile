@@ -2,12 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install -r requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 EXPOSE 8501
 
-CMD ["streamlit","run","app.py","--server.address=0.0.0.0"]
+ENV VLLM_API_BASE=http://host.docker.internal:8000/v1
+ENV MODEL_NAME=Qwen/Qwen2.5-32B-Instruct
+
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
