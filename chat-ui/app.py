@@ -5,11 +5,11 @@ import streamlit as st
 from rag import add_document, query_documents
 
 VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://host.docker.internal:8000/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-32B-Instruct")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 
-st.set_page_config(page_title="Local AI Chat", page_icon="💬", layout="wide")
+st.set_page_config(page_title="Bonzo - Local AI Chat", page_icon="💬", layout="wide")
 
-st.title("💬 Local AI Assistant")
+st.title("💬 Bonzo - Local AI Assistant")
 st.caption("vLLM + Streamlit + Chroma (RAG)")
 
 if "messages" not in st.session_state:
@@ -36,7 +36,7 @@ if prompt := st.chat_input("Ask something..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     # Build system + context
-    system_prompt = "You are a helpful local AI assistant."
+    system_prompt = "You are a helpful local AI assistant named Bonzo."
     context = ""
     if use_rag:
         context = query_documents(prompt)
