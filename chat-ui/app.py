@@ -124,6 +124,9 @@ def apply_theme(theme):
             border-radius: 8px;
             border: 1px solid #bdc3c7;
         }
+        .stSidebar * {
+            color: #2c3e50 !important;
+        }
         </style>
         """
     st.markdown(css, unsafe_allow_html=True)
