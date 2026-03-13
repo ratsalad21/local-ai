@@ -77,7 +77,7 @@ Streamlit UI → Chroma Vector DB → Context → vLLM → GPU
 - 🐶 **Bonzo AI Assistant**: Friendly local AI chat interface
 - 💬 **Streaming responses**: Real-time text generation with typing indicator
 - 🧠 **Conversation memory**: Maintains chat history across the session
-- 📄 **Document search (RAG)**: Upload and search through documents for context
+- 📄 **Document search (RAG)**: Upload and search through documents (txt/md/pdf) for context
 - 🎨 **Light/Dark themes**: Toggle UI themes via the sidebar
 - 📋 **Copy and export**: Copy individual messages or export full chat as Markdown
 - 👍👎 **Reactions & regeneration**: React to responses and regenerate the last answer
@@ -172,7 +172,7 @@ Available cached models in this repository:
 
 ## Document Search (RAG)
 
-Upload text or markdown files through the sidebar to enhance the AI's knowledge base.
+Upload text, markdown, or PDF files through the sidebar to enhance the AI's knowledge base.
 
 ```python
 # Example usage in code

@@ -7,6 +7,7 @@ import datetime
 import time
 import re
 from dateutil import tz
+from pypdf import PdfReader
 
 # Set timezone to Eastern Time (handles DST automatically)
 eastern = tz.gettz('America/New_York')
@@ -143,14 +144,30 @@ if "messages" not in st.session_state:
 if not st.session_state.messages:
     st.info("🐶 **Welcome to Bonzo!** I'm your local AI assistant. Upload documents for RAG or just chat about anything!")
 
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    """Extract concatenated text from a PDF file bytes."""
+    reader = PdfReader(file_bytes)
+    texts = []
+    for page in reader.pages:
+        texts.append(page.extract_text() or "")
+    return "\n\n".join(texts).strip()
+
+
 # Sidebar: document upload and theme toggle
 with st.sidebar:
     st.header("📄 Document Upload (RAG)")
-    uploaded_file = st.file_uploader("Upload a text file", type=["txt", "md"])
+    uploaded_file = st.file_uploader("Upload a document", type=["txt", "md", "pdf"])
     if uploaded_file is not None:
-        text = uploaded_file.read().decode("utf-8")
-        add_document(text, doc_id=uploaded_file.name)
-        st.success(f"Added {uploaded_file.name} to knowledge base.")
+        try:
+            if uploaded_file.type == "application/pdf" or uploaded_file.name.lower().endswith(".pdf"):
+                text = extract_text_from_pdf(uploaded_file.read())
+            else:
+                text = uploaded_file.read().decode("utf-8")
+
+            add_document(text, doc_id=uploaded_file.name)
+            st.success(f"Added {uploaded_file.name} to knowledge base.")
+        except Exception as e:
+            st.error(f"Failed to process {uploaded_file.name}: {e}")
 
     use_rag = st.checkbox("Use document search (RAG)", value=True)
 
