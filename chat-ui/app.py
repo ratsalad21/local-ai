@@ -8,6 +8,7 @@ import time
 import re
 from dateutil import tz
 from pypdf import PdfReader
+import io
 
 # Set timezone to Eastern Time (handles DST automatically)
 eastern = tz.gettz('America/New_York')
@@ -146,11 +147,59 @@ if not st.session_state.messages:
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract concatenated text from a PDF file bytes."""
-    reader = PdfReader(file_bytes)
+    reader = PdfReader(io.BytesIO(file_bytes))
+
+    # Check if PDF is encrypted
+    if reader.is_encrypted:
+        raise ValueError("PDF is password-protected. Please provide an unprotected PDF.")
+
     texts = []
-    for page in reader.pages:
-        texts.append(page.extract_text() or "")
+    for i, page in enumerate(reader.pages):
+        try:
+            page_text = page.extract_text() or ""
+            if page_text.strip():  # Only add non-empty pages
+                texts.append(page_text)
+        except Exception as e:
+            st.warning(f"⚠️ Could not extract text from page {i+1}: {e}")
+            continue
+
+    if not texts:
+        raise ValueError("No readable text found in PDF. It may contain only images or be corrupted.")
+
     return "\n\n".join(texts).strip()
+
+
+def process_uploaded_file(uploaded_file):
+    """Process uploaded file with progress indication."""
+    # Check file size (limit to 10MB)
+    file_size = len(uploaded_file.read())
+    uploaded_file.seek(0)  # Reset file pointer
+
+    if file_size > 10 * 1024 * 1024:  # 10MB limit
+        st.error("❌ File is too large (>10MB). Please use a smaller file.")
+        return
+
+    try:
+        # Show progress for PDF processing
+        if uploaded_file.type == "application/pdf" or uploaded_file.name.lower().endswith(".pdf"):
+            with st.spinner("📄 Processing PDF..."):
+                text = extract_text_from_pdf(uploaded_file.read())
+        else:
+            text = uploaded_file.read().decode("utf-8")
+
+        # Check text length (limit to prevent excessive processing)
+        if len(text) > 100000:  # ~100KB limit
+            st.warning(f"⚠️ Document is quite large ({len(text)} chars). Processing may take longer.")
+
+        # Show progress for embedding
+        with st.spinner("🧠 Generating embeddings..."):
+            add_document(text, doc_id=uploaded_file.name)
+
+        st.success(f"✅ Added {uploaded_file.name} to knowledge base ({len(text)} characters).")
+
+    except Exception as e:
+        st.error(f"❌ Failed to process {uploaded_file.name}: {str(e)}")
+        st.info("💡 Try a smaller file or check if the PDF is password-protected.")
 
 
 # Sidebar: document upload and theme toggle
@@ -158,16 +207,7 @@ with st.sidebar:
     st.header("📄 Document Upload (RAG)")
     uploaded_file = st.file_uploader("Upload a document", type=["txt", "md", "pdf"])
     if uploaded_file is not None:
-        try:
-            if uploaded_file.type == "application/pdf" or uploaded_file.name.lower().endswith(".pdf"):
-                text = extract_text_from_pdf(uploaded_file.read())
-            else:
-                text = uploaded_file.read().decode("utf-8")
-
-            add_document(text, doc_id=uploaded_file.name)
-            st.success(f"Added {uploaded_file.name} to knowledge base.")
-        except Exception as e:
-            st.error(f"Failed to process {uploaded_file.name}: {e}")
+        process_uploaded_file(uploaded_file)
 
     use_rag = st.checkbox("Use document search (RAG)", value=True)
 
