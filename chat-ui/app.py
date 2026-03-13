@@ -69,6 +69,9 @@ def apply_theme(theme):
             border-right: 1px solid #e1e8ed;
             color: #2c3e50;
         }
+        .stCheckbox label, .stSelectbox label, .stRadio label, .stTextInput label {
+            color: #2c3e50 !important;
+        }
         .stButton>button {
             background: #3498db;
             color: white;
