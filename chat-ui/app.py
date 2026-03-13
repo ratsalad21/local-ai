@@ -4,6 +4,7 @@ import requests
 import streamlit as st
 from rag import add_document, query_documents
 import datetime
+import time
 import re
 
 def render_message_with_code(content):
