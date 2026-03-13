@@ -4,6 +4,22 @@ import requests
 import streamlit as st
 from rag import add_document, query_documents
 import datetime
+import re
+
+def render_message_with_code(content):
+    """Render message content with syntax highlighting for code blocks."""
+    # Split content by code blocks
+    parts = re.split(r'```(\w+)?\n?(.*?)\n?```', content, flags=re.DOTALL)
+    
+    for i, part in enumerate(parts):
+        if i % 3 == 0:  # Regular text
+            if part.strip():
+                st.markdown(part)
+        elif i % 3 == 1:  # Language specifier
+            language = part or ""
+        elif i % 3 == 2:  # Code content
+            if part.strip():
+                st.code(part, language=language if language else None)
 
 VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://host.docker.internal:8000/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
@@ -136,30 +152,66 @@ with st.sidebar:
             timestamp = msg.get("timestamp", datetime.datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
             chat_md += f"**{role}** ({timestamp}):\n{msg['content']}\n\n"
         st.download_button("Download Chat", chat_md, "bonzo_chat.md", "text/markdown")
+
+    st.header("⚙️ Settings")
+    temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1, help="Controls randomness (0.0 = deterministic, 2.0 = very random)")
+    max_tokens = st.slider("Max Tokens", 100, 4096, 2048, 50, help="Maximum response length")
+    custom_system_prompt = st.text_area("System Prompt", "You are a helpful local AI assistant named Bonzo.", height=100, help="Customize Bonzo's personality")
 # Chat history
-for msg in st.session_state.messages:
+for i, msg in enumerate(st.session_state.messages):
     avatar = "🐶" if msg["role"] == "assistant" else "👤"
     with st.chat_message(msg["role"], avatar=avatar):
-        st.markdown(msg["content"])
+        render_message_with_code(msg["content"])
         if "timestamp" in msg:
             st.caption(f"_{msg['timestamp'].strftime('%I:%M %p')}_")
+        
+        # Copy button and reactions
+        col1, col2, col3 = st.columns([1, 1, 8])
+        with col1:
+            if st.button("📋", key=f"copy_{i}", help="Copy message"):
+                st.session_state.clipboard = msg["content"]
+                st.success("Copied!", icon="✅")
+        with col2:
+            if msg["role"] == "assistant":
+                reaction_key = f"reaction_{i}"
+                if reaction_key not in st.session_state:
+                    st.session_state[reaction_key] = None
+                
+                if st.button("👍" if st.session_state[reaction_key] != "👍" else "👎", 
+                           key=f"thumbs_{i}", 
+                           help="Toggle reaction"):
+                    st.session_state[reaction_key] = "👍" if st.session_state[reaction_key] != "👍" else "👎"
+                    st.rerun()
+                
+                if st.session_state[reaction_key]:
+                    st.caption(st.session_state[reaction_key])
+        with col3:
+            if msg["role"] == "assistant" and i == len(st.session_state.messages) - 1:
+                if st.button("🔄", key=f"regenerate_{i}", help="Regenerate response"):
+                    # Remove last assistant message and regenerate
+                    st.session_state.messages.pop()
+                    st.rerun()
 
 # User input
 if prompt := st.chat_input("Ask something..."):
     st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.datetime.now()})
 
     # Build system + context
-    system_prompt = "You are a helpful local AI assistant named Bonzo."
     context = ""
     if use_rag:
         context = query_documents(prompt)
         if context:
-            system_prompt += "\n\nUse the following context if relevant:\n" + context
+            system_prompt = custom_system_prompt + "\n\nUse the following context if relevant:\n" + context
+        else:
+            system_prompt = custom_system_prompt
 
     # Prepare OpenAI-style payload
     payload = {
         "model": MODEL_NAME,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
         "messages": [
+            {"role": "system", "content": system_prompt},
             {"role": "system", "content": system_prompt},
             *st.session_state.messages,
         ],
@@ -167,6 +219,19 @@ if prompt := st.chat_input("Ask something..."):
     }
 
     with st.chat_message("assistant"):
+        # Typing indicator
+        typing_placeholder = st.empty()
+        with typing_placeholder.container():
+            col1, col2 = st.columns([1, 10])
+            with col1:
+                st.write("🐶")
+            with col2:
+                typing_text = st.empty()
+                for i in range(3):
+                    typing_text.write("Bonzo is typing" + "." * (i + 1))
+                    time.sleep(0.5)
+                typing_text.write("Bonzo is typing...")
+        
         placeholder = st.empty()
         full_response = ""
 
@@ -189,4 +254,6 @@ if prompt := st.chat_input("Ask something..."):
                     except Exception:
                         continue
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response, "timestamp": datetime.datetime.now()})
+        # Clear typing indicator and show final message
+        typing_placeholder.empty()
+        placeholder.markdown(full_response)
