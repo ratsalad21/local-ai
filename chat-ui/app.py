@@ -207,15 +207,16 @@ if prompt := st.chat_input("Ask something..."):
             system_prompt = custom_system_prompt
 
     # Prepare OpenAI-style payload
+    # Clean messages for API (exclude timestamps)
+    api_messages = [{"role": "system", "content": system_prompt}]
+    for msg in st.session_state.messages:
+        api_messages.append({"role": msg["role"], "content": msg["content"]})
+    
     payload = {
         "model": MODEL_NAME,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": system_prompt},
-            *st.session_state.messages,
-        ],
+        "messages": api_messages,
         "stream": True,
     }
 
