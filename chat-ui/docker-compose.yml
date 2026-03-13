@@ -1,0 +1,7 @@
+version: "3"
+
+services:
+  ai-ui:
+    build: .
+    ports:
+      - "8501:8501"
