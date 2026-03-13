@@ -231,7 +231,7 @@ with st.sidebar:
 
     st.header("⚙️ Settings")
     temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1, help="Controls randomness (0.0 = deterministic, 2.0 = very random)")
-    max_tokens = st.slider("Max Tokens", 100, 4096, 2048, 50, help="Maximum response length")
+    max_tokens = st.slider("Max Tokens", 100, 2048, 1024, 50, help="Maximum response length (reduce if getting context length errors)")
     custom_system_prompt = st.text_area("System Prompt", "You are a helpful local AI assistant named Bonzo.", height=100, help="Customize Bonzo's personality")
 # Chat history
 for i, msg in enumerate(st.session_state.messages):
