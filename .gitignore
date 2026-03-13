@@ -8,6 +8,7 @@ venv/
 # model caches
 cache/
 models/
+vllm/
 
 # vector database
 chroma/
