@@ -14,6 +14,6 @@ COPY . .
 EXPOSE 8501
 
 ENV VLLM_API_BASE=http://host.docker.internal:8000/v1
-ENV MODEL_NAME=Qwen/Qwen2.5-32B-Instruct
+ENV MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
 
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]

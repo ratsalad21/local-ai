@@ -4,7 +4,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 client = chromadb.PersistentClient(
-    path="chroma_db",
+    path="/chroma_db",
     settings=Settings(allow_reset=True)
 )
 

@@ -26,6 +26,7 @@ services:
       - "8501:8501"
     volumes:
       - .:/app
+      - G:/local-ai/chroma_db:/chroma_db
     environment:
       - VLLM_API_BASE=http://vllm:8000/v1
       - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct

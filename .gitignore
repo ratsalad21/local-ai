@@ -11,6 +11,7 @@ models/
 
 # vector database
 chroma/
+chroma_db/
 
 # OS
 .DS_Store
