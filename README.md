@@ -31,7 +31,7 @@ Optimized for RTX 5090, 64GB RAM, running Qwen2.5-32B-Instruct in bf16 to preven
 ```powershell
 docker run --gpus all `
   -p 8000:8000 `
-  -v G:\AI\vllm\cache:/root/.cache/huggingface `
+  -v G:\local-ai\vllm\cache:/root/.cache/huggingface `
   vllm/vllm-openai:nightly `
   --model Qwen/Qwen2.5-7B-Instruct `
   --dtype bfloat16 `
