@@ -54,6 +54,13 @@ def apply_theme(theme):
         .stSidebar {
             background: rgba(0,0,0,0.3);
         }
+        .stChatMessage p, .stChatMessage div, .stChatMessage span {
+            color: white !important;
+        }
+        .stCodeBlock, .stCode {
+            background: rgba(255,255,255,0.1) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+        }
         .stButton>button {
             background: #ff6b6b;
             color: white;
@@ -92,8 +99,12 @@ def apply_theme(theme):
         .stCheckbox, .stSelectbox, .stRadio, .stTextInput {
             color: #2c3e50 !important;
         }
-        .stSidebar * {
+        .stChatMessage p, .stChatMessage div, .stChatMessage span {
             color: #2c3e50 !important;
+        }
+        .stCodeBlock, .stCode {
+            background: rgba(0,0,0,0.05) !important;
+            border: 1px solid #e1e8ed !important;
         }
         .stButton>button {
             background: #3498db;
