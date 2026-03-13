@@ -43,23 +43,33 @@ def apply_theme(theme):
         css = """
         <style>
         .stApp {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: #333;
+            background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+            color: #2c3e50;
         }
         .stChatMessage, .stMarkdown {
-            background: rgba(255,255,255,0.8) !important;
-            border-radius: 10px;
-            padding: 10px;
-            margin: 5px 0;
+            background: rgba(255,255,255,0.95) !important;
+            border-radius: 15px;
+            padding: 15px;
+            margin: 8px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .stSidebar {
-            background: rgba(255,255,255,0.9);
+            background: rgba(255,255,255,0.98);
+            border-right: 1px solid #e1e8ed;
         }
         .stButton>button {
-            background: #4ecdc4;
+            background: #3498db;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+        .stButton>button:hover {
+            background: #2980b9;
+        }
+        .stTextInput input {
+            border-radius: 8px;
+            border: 1px solid #bdc3c7;
         }
         </style>
         """
