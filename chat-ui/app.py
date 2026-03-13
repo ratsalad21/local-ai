@@ -3,6 +3,7 @@ import os
 import requests
 import streamlit as st
 from rag import add_document, query_documents
+import datetime
 
 VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://host.docker.internal:8000/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
@@ -27,6 +28,11 @@ def apply_theme(theme):
             border-radius: 10px;
             padding: 10px;
             margin: 5px 0;
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .stSidebar {
             background: rgba(0,0,0,0.3);
@@ -52,6 +58,11 @@ def apply_theme(theme):
             padding: 15px;
             margin: 8px 0;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .stSidebar {
             background: rgba(255,255,255,0.98);
@@ -84,6 +95,10 @@ st.caption("vLLM + Streamlit + Chroma (RAG)")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Welcome message
+if not st.session_state.messages:
+    st.info("🐶 **Welcome to Bonzo!** I'm your local AI assistant. Upload documents for RAG or just chat about anything!")
+
 # Sidebar: document upload and theme toggle
 with st.sidebar:
     st.header("📄 Document Upload (RAG)")
@@ -104,16 +119,25 @@ with st.sidebar:
     if st.button("Clear Chat History"):
         st.session_state.messages = []
         st.rerun()
-
+    st.header("💾 Export")
+    if st.button("Export Chat as Markdown"):
+        chat_md = "# Bonzo Chat Export\n\n"
+        for msg in st.session_state.messages:
+            role = "Bonzo" if msg["role"] == "assistant" else "You"
+            timestamp = msg.get("timestamp", datetime.datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+            chat_md += f"**{role}** ({timestamp}):\n{msg['content']}\n\n"
+        st.download_button("Download Chat", chat_md, "bonzo_chat.md", "text/markdown")
 # Chat history
 for msg in st.session_state.messages:
     avatar = "🐶" if msg["role"] == "assistant" else "👤"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
+        if "timestamp" in msg:
+            st.caption(f"_{msg['timestamp'].strftime('%I:%M %p')}_")
 
 # User input
 if prompt := st.chat_input("Ask something..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.datetime.now()})
 
     # Build system + context
     system_prompt = "You are a helpful local AI assistant named Bonzo."
@@ -156,4 +180,4 @@ if prompt := st.chat_input("Ask something..."):
                     except Exception:
                         continue
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.messages.append({"role": "assistant", "content": full_response, "timestamp": datetime.datetime.now()})
