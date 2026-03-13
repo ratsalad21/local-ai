@@ -75,9 +75,12 @@ Streamlit UI → Chroma Vector DB → Context → vLLM → GPU
 ## Features
 
 - 🐶 **Bonzo AI Assistant**: Friendly local AI chat interface
-- 💬 **Streaming responses**: Real-time text generation
-- 🧠 **Conversation memory**: Maintains chat history
-- 📄 **Document search (RAG)**: Upload and search through documents
+- 💬 **Streaming responses**: Real-time text generation with typing indicator
+- 🧠 **Conversation memory**: Maintains chat history across the session
+- 📄 **Document search (RAG)**: Upload and search through documents for context
+- 🎨 **Light/Dark themes**: Toggle UI themes via the sidebar
+- 📋 **Copy and export**: Copy individual messages or export full chat as Markdown
+- 👍👎 **Reactions & regeneration**: React to responses and regenerate the last answer
 - 🔒 **Fully local**: No data sent to external servers
 - 🚀 **GPU acceleration**: Optimized for NVIDIA GPUs
 - 🐳 **Dockerized**: Easy deployment and isolation
@@ -123,7 +126,8 @@ local-ai/
 │   ├── rag.py              # RAG functionality with Chroma
 │   ├── requirements.txt    # Python dependencies
 │   ├── Dockerfile          # Docker image for chat UI
-│   └── docker-compose.yml  # Multi-service Docker setup
+│   ├── docker-compose.yml  # Multi-service Docker setup
+│   └── tests/              # Unit tests (pytest)
 │
 ├── vllm/
 │   └── cache/              # Hugging Face model cache
@@ -200,6 +204,11 @@ docker run --gpus all -p 8000:8000 -v G:\local-ai\vllm\cache:/root/.cache/huggin
 3. Run the Streamlit app:
 ```bash
 streamlit run app.py
+```
+
+### Run tests
+```bash
+pytest
 ```
 
 ### Rebuilding containers

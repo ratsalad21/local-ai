@@ -1,4 +1,6 @@
-# rag.py
+from pathlib import Path
+
+content = '''# rag.py
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
@@ -23,6 +25,7 @@ def init_rag(path: str = "/chroma_db"):
     collection = client.get_or_create_collection("documents")
     embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
+
 def add_document(text: str, doc_id: str):
     if embedder is None or collection is None:
         init_rag()
@@ -33,6 +36,7 @@ def add_document(text: str, doc_id: str):
         documents=[text],
         embeddings=[embedding],
     )
+
 
 def query_documents(query: str, k: int = 3):
     if embedder is None or collection is None:
@@ -45,3 +49,8 @@ def query_documents(query: str, k: int = 3):
     )
     docs = results.get("documents", [[]])[0]
     return "\n\n".join(docs)
+'''
+
+path = Path(r"g:\local-ai\chat-ui\rag.py")
+path.write_text(content)
+print(f"Wrote {path}")
