@@ -56,6 +56,7 @@ def apply_theme(theme):
         .stSidebar {
             background: rgba(255,255,255,0.98);
             border-right: 1px solid #e1e8ed;
+            color: #2c3e50;
         }
         .stButton>button {
             background: #3498db;
