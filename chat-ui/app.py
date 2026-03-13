@@ -6,9 +6,10 @@ from rag import add_document, query_documents
 import datetime
 import time
 import re
+from dateutil import tz
 
-# Set timezone to EST (UTC-5)
-EST = datetime.timezone(datetime.timedelta(hours=-5))
+# Set timezone to Eastern Time (handles DST automatically)
+eastern = tz.gettz('America/New_York')
 
 def render_message_with_code(content):
     """Render message content with syntax highlighting for code blocks."""
@@ -164,7 +165,7 @@ with st.sidebar:
         chat_md = "# Bonzo Chat Export\n\n"
         for msg in st.session_state.messages:
             role = "Bonzo" if msg["role"] == "assistant" else "You"
-            timestamp = msg.get("timestamp", datetime.datetime.now(EST)).strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = msg.get("timestamp", datetime.datetime.now(eastern)).strftime("%Y-%m-%d %H:%M:%S")
             chat_md += f"**{role}** ({timestamp}):\n{msg['content']}\n\n"
         st.download_button("Download Chat", chat_md, "bonzo_chat.md", "text/markdown")
 
@@ -209,7 +210,7 @@ for i, msg in enumerate(st.session_state.messages):
 
 # User input
 if prompt := st.chat_input("Ask something..."):
-    st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.datetime.now(EST)})
+    st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.datetime.now(eastern)})
 
     # Build system + context
     context = ""
@@ -274,4 +275,4 @@ if prompt := st.chat_input("Ask something..."):
         typing_placeholder.empty()
         placeholder.markdown(full_response)
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response, "timestamp": datetime.datetime.now(EST)})
+        st.session_state.messages.append({"role": "assistant", "content": full_response, "timestamp": datetime.datetime.now(eastern)})

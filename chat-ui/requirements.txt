@@ -3,3 +3,4 @@ openai
 chromadb
 sentence-transformers
 pypdf
+python-dateutil
