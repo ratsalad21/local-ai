@@ -190,10 +190,10 @@ The app currently uses these environment variables:
 The vLLM service is also configured with:
 
 - `--dtype bfloat16`
-- `--gpu-memory-utilization 0.90`
-- `--max-model-len 16384`
-- `--max-num-batched-tokens 16384`
-- `--max-num-seqs 16`
+- `--gpu-memory-utilization 0.93`
+- `--max-model-len 8192`
+- `--max-num-batched-tokens 8192`
+- `--max-num-seqs 8`
 
 For `Qwen3`, the app currently uses non-thinking chat defaults aimed at responsive general use:
 

@@ -19,10 +19,10 @@ services:
     command: >
       --model Qwen/Qwen3-14B
       --dtype bfloat16
-      --gpu-memory-utilization 0.90
-      --max-model-len 16384
-      --max-num-batched-tokens 16384
-      --max-num-seqs 16
+      --gpu-memory-utilization 0.93
+      --max-model-len 8192
+      --max-num-batched-tokens 8192
+      --max-num-seqs 8
       --host 0.0.0.0
       --port 8000
     healthcheck:
