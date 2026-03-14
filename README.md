@@ -1,6 +1,6 @@
 # Local AI
 
-> A self-hosted local assistant stack built with Streamlit, vLLM, and optional RAG through Chroma.
+> A self-hosted local assistant stack built with Streamlit, vLLM, and optional RAG through Chroma, designed to keep your chats and documents on your own machine.
 
 ## At A Glance
 
@@ -10,6 +10,7 @@
 | UI | `http://localhost:8501` |
 | vLLM API | `http://localhost:8000/v1` |
 | Stack | Docker + Streamlit + vLLM + Chroma |
+| Privacy model | Fully local, self-hosted |
 | Primary runtime data | `docs/`, `chroma_db/`, `chat_history/`, `vllm/cache/` |
 
 ## Overview
@@ -24,6 +25,20 @@
 - saved chat sessions on disk
 - document preview, search, and re-indexing tools
 - a Docker-first workflow for running everything together
+
+## Local-First Privacy
+
+This project is built to run fully on your own machine.
+
+- chat requests are served by your local `vllm` container
+- uploaded documents are stored in your local `docs/` directory
+- embeddings and retrieval data stay in your local `chroma_db/`
+- saved conversations stay in your local `chat_history/`
+- model weights and caches stay under your local `vllm/cache/`
+
+In normal use, your prompts, chat history, and documents do not leave your house.
+
+The main exception is model or embedding downloads from Hugging Face when you fetch models for the first time or refresh dependencies. After that, inference and retrieval run locally against your own files and containers.
 
 For the full project walkthrough, architecture, configuration details, and troubleshooting guide, see [`docs/PROJECT_GUIDE.md`](./docs/PROJECT_GUIDE.md).
 
