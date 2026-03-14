@@ -742,6 +742,38 @@ def render_app_chrome(model_status: dict[str, Any], indexed_doc_count: int) -> N
             color: #4f3c22;
             margin-bottom: 0.8rem;
         }}
+        .streamlit-expanderHeader {{
+            background: rgba(58, 46, 31, 0.9);
+            color: #fff3e2 !important;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 214, 161, 0.14);
+        }}
+        [data-testid="stExpanderDetails"] {{
+            background: rgba(255, 249, 240, 0.72);
+            border: 1px solid rgba(120, 96, 66, 0.12);
+            border-radius: 0 0 18px 18px;
+            padding: 0.85rem 1rem 0.5rem;
+        }}
+        .bonzo-retrieval-card {{
+            background: rgba(72, 56, 37, 0.95);
+            border: 1px solid rgba(255, 214, 161, 0.14);
+            border-radius: 16px;
+            padding: 0.85rem 0.95rem;
+            margin: 0.75rem 0;
+            box-shadow: 0 10px 24px rgba(57, 42, 22, 0.14);
+        }}
+        .bonzo-retrieval-meta {{
+            color: #ffe2b9;
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin-bottom: 0.55rem;
+        }}
+        .bonzo-retrieval-text {{
+            color: #fff7ee;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            font-size: 0.96rem;
+        }}
         @media (max-width: 900px) {{
             .bonzo-grid {{
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1051,8 +1083,15 @@ if prompt := st.chat_input("Ask something..."):
                 similarity_text = (
                     f"{similarity * 100:.0f}% match" if isinstance(similarity, float) else "match"
                 )
-                st.markdown(f"**{match['source']}** - chunk {match['chunk']} - {similarity_text}")
-                st.text(match["text"][:MAX_CONTEXT_CHARS])
+                st.markdown(
+                    f"""
+                    <div class="bonzo-retrieval-card">
+                      <div class="bonzo-retrieval-meta">{match['source']} · chunk {match['chunk']} · {similarity_text}</div>
+                      <div class="bonzo-retrieval-text">{match["text"][:MAX_CONTEXT_CHARS]}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     system_prompt = build_retrieval_system_prompt(custom_system_prompt, context) if context else custom_system_prompt
     api_messages, adjusted_max_tokens = fit_messages_to_budget(

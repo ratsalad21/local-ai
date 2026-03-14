@@ -29,25 +29,17 @@ For the full project walkthrough, architecture, configuration details, and troub
 
 ## Interface Preview
 
-Drop screenshots into [`docs/images/README.md`](./docs/images/README.md)'s folder using the suggested filenames below, then this section becomes your visual tour.
-
 ### Main chat experience
 
-```text
-docs/images/bonzo-main-chat.png
-```
+![Bonzo main chat experience](./docs/images/bonzo-main-chat.png)
 
 ### Sidebar and controls
 
-```text
-docs/images/bonzo-sidebar-controls.png
-```
+![Bonzo sidebar and controls](./docs/images/bonzo-sidebar-controls.png)
 
 ### Retrieval and sources
 
-```text
-docs/images/bonzo-rag-results.png
-```
+![Bonzo retrieval and sources](./docs/images/bonzo-rag-results.png)
 
 ## Quick Start
 

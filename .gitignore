@@ -25,6 +25,10 @@ docs/*
 !docs/images/
 docs/images/*
 !docs/images/README.md
+!docs/images/*.png
+!docs/images/*.jpg
+!docs/images/*.jpeg
+!docs/images/*.webp
 
 # vector database
 chroma/
