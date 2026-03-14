@@ -523,10 +523,44 @@ def render_app_chrome(model_status: dict[str, Any], indexed_doc_count: int) -> N
         [data-testid="stSidebar"] [data-baseweb="select"] > div,
         [data-testid="stSidebar"] .stTextInput input,
         [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] [data-baseweb="input"] input,
+        [data-testid="stSidebar"] [data-baseweb="textarea"] textarea,
         [data-testid="stSidebar"] .stFileUploader section {{
-            background: rgba(255, 255, 255, 0.06) !important;
+            background: rgba(255, 255, 255, 0.1) !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
             border-radius: 14px !important;
+        }}
+        [data-testid="stSidebar"] [data-baseweb="input"],
+        [data-testid="stSidebar"] [data-baseweb="textarea"],
+        [data-testid="stSidebar"] [data-baseweb="select"] {{
+            background: rgba(255, 255, 255, 0.1) !important;
+            border-radius: 14px !important;
+        }}
+        [data-testid="stSidebar"] .stTextInput input,
+        [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] [data-baseweb="select"] input,
+        [data-testid="stSidebar"] [data-baseweb="select"] span,
+        [data-testid="stSidebar"] [data-baseweb="input"] input,
+        [data-testid="stSidebar"] [data-baseweb="textarea"] textarea,
+        [data-testid="stSidebar"] [contenteditable="true"] {{
+            color: #fff7ee !important;
+            -webkit-text-fill-color: #fff7ee !important;
+            caret-color: #ffd594 !important;
+            opacity: 1 !important;
+        }}
+        [data-testid="stSidebar"] [data-baseweb="input"] *,
+        [data-testid="stSidebar"] [data-baseweb="textarea"] *,
+        [data-testid="stSidebar"] [data-baseweb="select"] * {{
+            color: #fff7ee !important;
+            -webkit-text-fill-color: #fff7ee !important;
+        }}
+        [data-testid="stSidebar"] .stTextInput input::placeholder,
+        [data-testid="stSidebar"] .stTextArea textarea::placeholder,
+        [data-testid="stSidebar"] [data-baseweb="input"] input::placeholder,
+        [data-testid="stSidebar"] [data-baseweb="textarea"] textarea::placeholder,
+        [data-testid="stSidebar"] [contenteditable="true"]::placeholder {{
+            color: rgba(243, 239, 231, 0.52) !important;
+            -webkit-text-fill-color: rgba(243, 239, 231, 0.52) !important;
         }}
         [data-testid="stSidebar"] .stButton > button {{
             border-radius: 14px;
@@ -549,16 +583,53 @@ def render_app_chrome(model_status: dict[str, Any], indexed_doc_count: int) -> N
             box-shadow: 0 10px 24px rgba(80, 64, 40, 0.06);
         }}
         [data-testid="stChatMessageContent"] {{
-            color: #332617;
+            color: #2a1d10;
         }}
         [data-testid="stChatInput"] {{
-            background: rgba(255, 250, 242, 0.92);
-            border: 1px solid rgba(120, 96, 66, 0.14);
+            background: rgba(61, 49, 35, 0.96);
+            border: 1px solid rgba(255, 215, 160, 0.2);
             border-radius: 18px;
-            box-shadow: 0 12px 26px rgba(78, 60, 34, 0.08);
+            box-shadow: 0 14px 30px rgba(53, 38, 20, 0.18);
+        }}
+        [data-testid="stChatInput"] [data-baseweb="textarea"],
+        [data-testid="stChatInput"] [data-baseweb="input"] {{
+            background: rgba(61, 49, 35, 0.96) !important;
         }}
         [data-testid="stChatInput"] textarea {{
-            color: #332617 !important;
+            color: #fff6e8 !important;
+            -webkit-text-fill-color: #fff6e8 !important;
+            caret-color: #ffd594 !important;
+            opacity: 1 !important;
+        }}
+        [data-testid="stChatInput"] input,
+        [data-testid="stChatInput"] [data-baseweb="textarea"] textarea,
+        [data-testid="stChatInput"] [data-baseweb="input"] input,
+        [data-testid="stChatInput"] [contenteditable="true"] {{
+            color: #fff6e8 !important;
+            -webkit-text-fill-color: #fff6e8 !important;
+            caret-color: #ffd594 !important;
+            opacity: 1 !important;
+        }}
+        [data-testid="stChatInput"] [data-baseweb="textarea"] *,
+        [data-testid="stChatInput"] [data-baseweb="input"] * {{
+            color: #fff6e8 !important;
+            -webkit-text-fill-color: #fff6e8 !important;
+        }}
+        [data-testid="stChatInput"] textarea::placeholder {{
+            color: rgba(255, 246, 232, 0.5) !important;
+            -webkit-text-fill-color: rgba(255, 246, 232, 0.5) !important;
+        }}
+        [data-testid="stChatInput"] input::placeholder,
+        [data-testid="stChatInput"] [data-baseweb="textarea"] textarea::placeholder,
+        [data-testid="stChatInput"] [data-baseweb="input"] input::placeholder {{
+            color: rgba(255, 246, 232, 0.5) !important;
+            -webkit-text-fill-color: rgba(255, 246, 232, 0.5) !important;
+        }}
+        .stTextInput input,
+        .stTextArea textarea,
+        [data-baseweb="input"] input,
+        [data-baseweb="textarea"] textarea {{
+            opacity: 1 !important;
         }}
         .stSlider [data-baseweb="slider"] > div > div {{
             background: linear-gradient(90deg, #d88d43, #5f95b5) !important;
