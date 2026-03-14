@@ -24,7 +24,7 @@ from rag import (
 # ================================
 
 VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://vllm:8000/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B")
 
 DOCS_DIR = Path(os.getenv("DOCS_DIR", "/docs"))
 CHAT_HISTORY_DIR = Path(os.getenv("CHAT_HISTORY_DIR", "/chat_history"))
@@ -37,6 +37,10 @@ STATUS_TIMEOUT = 5
 RETRIEVAL_K = 5
 DOC_PREVIEW_CHARS = 3000
 DOC_SEARCH_RESULTS = 5
+DEFAULT_TOP_P = 0.8
+DEFAULT_TOP_K = 20
+DEFAULT_PRESENCE_PENALTY = 1.5
+DEFAULT_ENABLE_THINKING = False
 
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 CHAT_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -646,7 +650,7 @@ with st.sidebar:
 # ================================
 
 for msg in st.session_state.messages:
-    avatar = "B" if msg["role"] == "assistant" else "U"
+    avatar = "🐶" if msg["role"] == "assistant" else "👤"
 
     with st.chat_message(msg["role"], avatar=avatar):
         render_message_with_code(msg["content"])
@@ -702,12 +706,16 @@ if prompt := st.chat_input("Ask something..."):
     payload = {
         "model": st.session_state.selected_model,
         "temperature": temperature,
+        "top_p": DEFAULT_TOP_P,
+        "presence_penalty": DEFAULT_PRESENCE_PENALTY,
         "max_tokens": max_tokens,
         "messages": api_messages,
         "stream": True,
+        "chat_template_kwargs": {"enable_thinking": DEFAULT_ENABLE_THINKING},
+        "top_k": DEFAULT_TOP_K,
     }
 
-    with st.chat_message("assistant", avatar="B"):
+    with st.chat_message("assistant", avatar="🐶"):
         placeholder = st.empty()
         full_response = ""
 

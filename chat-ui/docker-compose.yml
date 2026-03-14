@@ -17,10 +17,10 @@ services:
     environment:
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
     command: >
-      --model Qwen/Qwen2.5-7B-Instruct
-      --dtype auto
-      --gpu-memory-utilization 0.92
-      --max-model-len 4096
+      --model Qwen/Qwen3-14B
+      --dtype bfloat16
+      --gpu-memory-utilization 0.95
+      --max-model-len 16384
       --max-num-batched-tokens 16384
       --max-num-seqs 16
       --host 0.0.0.0
@@ -45,7 +45,7 @@ services:
       - "G:/local-ai/chat_history:/chat_history"
     environment:
       - VLLM_API_BASE=http://vllm:8000/v1
-      - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
+      - MODEL_NAME=Qwen/Qwen3-14B
       - DOCS_DIR=/docs
       - CHROMA_DB_PATH=/chroma_db
       - CHAT_HISTORY_DIR=/chat_history

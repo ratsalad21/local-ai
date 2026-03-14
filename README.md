@@ -59,6 +59,8 @@ The current compose stack starts:
 - `vllm` on port `8000`
 - `chat-ui` on port `8501`
 
+The current default model is `Qwen/Qwen3-14B`.
+
 ## Hardware Requirements
 
 Recommended for the current default setup:
@@ -158,7 +160,7 @@ The current Docker setup lives in [`chat-ui/docker-compose.yml`](./chat-ui/docke
 
 ### Default Model
 
-- `Qwen/Qwen2.5-7B-Instruct`
+- `Qwen/Qwen3-14B`
 
 ### Ports
 
@@ -179,18 +181,26 @@ These mounts mean the current compose file is tailored to this Windows machine l
 The app currently uses these environment variables:
 
 - `VLLM_API_BASE` default: `http://vllm:8000/v1`
-- `MODEL_NAME` default: `Qwen/Qwen2.5-7B-Instruct`
+- `MODEL_NAME` default: `Qwen/Qwen3-14B`
 - `DOCS_DIR` default: `/docs`
 - `CHROMA_DB_PATH` default: `/chroma_db`
 - `CHAT_HISTORY_DIR` default: `/chat_history`
 
 The vLLM service is also configured with:
 
-- `--dtype auto`
-- `--gpu-memory-utilization 0.92`
-- `--max-model-len 4096`
+- `--dtype bfloat16`
+- `--gpu-memory-utilization 0.95`
+- `--max-model-len 16384`
 - `--max-num-batched-tokens 16384`
 - `--max-num-seqs 16`
+
+For `Qwen3`, the app currently uses non-thinking chat defaults aimed at responsive general use:
+
+- `temperature=0.7`
+- `top_p=0.8`
+- `top_k=20`
+- `presence_penalty=1.5`
+- `chat_template_kwargs.enable_thinking=false`
 
 ## Python Dependencies
 
