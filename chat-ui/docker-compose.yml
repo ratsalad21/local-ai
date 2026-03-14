@@ -18,9 +18,11 @@ services:
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
     command: >
       --model Qwen/Qwen2.5-7B-Instruct
-      --dtype bfloat16
-      --gpu-memory-utilization 0.70
-      --max-model-len 8192
+      --dtype auto
+      --gpu-memory-utilization 0.92
+      --max-model-len 4096
+      --max-num-batched-tokens 16384
+      --max-num-seqs 16
       --host 0.0.0.0
       --port 8000
     healthcheck:
