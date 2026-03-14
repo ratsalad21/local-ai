@@ -138,6 +138,8 @@ The app currently uses these environment variables:
 
 - `VLLM_API_BASE` default: `http://vllm:8000/v1`
 - `MODEL_NAME` default: `Qwen/Qwen2.5-7B-Instruct`
+- `DOCS_DIR` default: `/docs`
+- `CHROMA_DB_PATH` default: `/chroma_db`
 
 The vLLM service is also configured with:
 
@@ -166,7 +168,7 @@ The current app code uses `requests` for vLLM calls; `openai` is installed but n
 
 - `docs/`, `chroma_db/`, and `vllm/cache/` are runtime data directories, not source directories.
 - The repo is currently centered on the `chat-ui` application; there is no separate backend service beyond the compose-managed stack.
-- The checked-in tests in [`chat-ui/tests/test_rag.py`](./chat-ui/tests/test_rag.py) appear to target an older `rag.py` interface and may need updating before they pass against the current code.
+- The current Docker setup is still Windows-path-oriented because the compose file mounts `G:/local-ai/...` host directories.
 
 ## License
 

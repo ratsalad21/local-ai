@@ -45,6 +45,8 @@ services:
     environment:
       - VLLM_API_BASE=http://vllm:8000/v1
       - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
+      - DOCS_DIR=/docs
+      - CHROMA_DB_PATH=/chroma_db
       - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
     depends_on:
       - vllm

@@ -17,13 +17,13 @@ from rag import add_document, query_documents
 VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://vllm:8000/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 
-DOCS_DIR = Path("docs")
+DOCS_DIR = Path(os.getenv("DOCS_DIR", "/docs"))
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_CONTEXT_CHARS = 4000
 MAX_HISTORY_MESSAGES = 12
 REQUEST_TIMEOUT = 300
 
-DOCS_DIR.mkdir(exist_ok=True)
+DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
 eastern = tz.gettz("America/New_York")
 
@@ -52,7 +52,7 @@ def render_message_with_code(content: str) -> None:
 
 
 def save_uploaded_file(uploaded_file) -> Path:
-    """Save uploaded file to docs directory."""
+    """Save uploaded file to the configured docs directory."""
     file_path = DOCS_DIR / uploaded_file.name
     file_path.write_bytes(uploaded_file.getbuffer())
     return file_path
@@ -93,26 +93,26 @@ def process_uploaded_file(uploaded_file) -> None:
     file_size = len(file_bytes)
 
     if file_size > MAX_FILE_SIZE:
-        st.error("❌ File too large (max 10MB)")
+        st.error("File too large (max 10 MB)")
         return
 
     try:
-        with st.spinner("💾 Saving document..."):
+        with st.spinner("Saving document..."):
             file_path = save_uploaded_file(uploaded_file)
 
-        with st.spinner("📄 Extracting text..."):
+        with st.spinner("Extracting text..."):
             text = extract_text(file_path)
 
         if len(text) > 100000:
-            st.warning("⚠️ Large document detected. Processing may take longer.")
+            st.warning("Large document detected. Processing may take longer.")
 
-        with st.spinner("🧠 Generating embeddings..."):
+        with st.spinner("Generating embeddings..."):
             add_document(text, doc_id=uploaded_file.name)
 
-        st.success(f"✅ {uploaded_file.name} added to knowledge base")
+        st.success(f"{uploaded_file.name} added to knowledge base")
 
     except Exception as e:
-        st.error(f"❌ Failed to process file: {e}")
+        st.error(f"Failed to process file: {e}")
 
 
 def build_api_messages(system_prompt: str, messages: list[dict]) -> list[dict]:
@@ -129,7 +129,7 @@ def build_api_messages(system_prompt: str, messages: list[dict]) -> list[dict]:
     return api_messages
 
 
-def stream_chat_completion(payload: dict) -> str:
+def stream_chat_completion(payload: dict):
     """Call vLLM OpenAI-compatible API and stream the response."""
     full_response = ""
 
@@ -167,10 +167,7 @@ def stream_chat_completion(payload: dict) -> str:
 # Streamlit UI Setup
 # ================================
 
-st.set_page_config(page_title="Bonzo - Local AI Chat", page_icon="🐶", layout="wide")
-
-if "theme" not in st.session_state:
-    st.session_state.theme = "light"
+st.set_page_config(page_title="Bonzo - Local AI Chat", page_icon=":dog:", layout="wide")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -178,11 +175,11 @@ if "messages" not in st.session_state:
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
 
-st.title("🐶 Bonzo - Local AI Assistant")
+st.title("Bonzo - Local AI Assistant")
 st.caption("vLLM + Streamlit + Chroma (RAG)")
 
 if not st.session_state.messages:
-    st.info("🐶 **Welcome to Bonzo!** Upload documents or start chatting.")
+    st.info("Welcome to Bonzo. Upload documents or start chatting.")
 
 
 # ================================
@@ -190,7 +187,7 @@ if not st.session_state.messages:
 # ================================
 
 with st.sidebar:
-    st.header("📄 Document Upload")
+    st.header("Document Upload")
 
     uploaded_file = st.file_uploader("Upload document", type=["txt", "md", "pdf"])
 
@@ -203,13 +200,13 @@ with st.sidebar:
     use_rag = st.checkbox("Use document search (RAG)", value=True)
     show_context = st.checkbox("Show retrieved context", value=True)
 
-    st.header("🧹 Chat Controls")
+    st.header("Chat Controls")
 
     if st.button("Clear Chat History"):
         st.session_state.messages = []
         st.rerun()
 
-    st.header("⚙️ Settings")
+    st.header("Settings")
 
     temperature = st.slider("Temperature", 0.0, 2.0, 0.7)
     max_tokens = st.slider("Max Tokens", 100, 2048, 1024)
@@ -227,7 +224,7 @@ with st.sidebar:
 # ================================
 
 for msg in st.session_state.messages:
-    avatar = "🐶" if msg["role"] == "assistant" else "👤"
+    avatar = ":dog:" if msg["role"] == "assistant" else ":bust_in_silhouette:"
 
     with st.chat_message(msg["role"], avatar=avatar):
         render_message_with_code(msg["content"])
@@ -278,7 +275,7 @@ if prompt := st.chat_input("Ask something..."):
         "stream": True,
     }
 
-    with st.chat_message("assistant", avatar="🐶"):
+    with st.chat_message("assistant", avatar=":dog:"):
         placeholder = st.empty()
         full_response = ""
 
@@ -288,10 +285,10 @@ if prompt := st.chat_input("Ask something..."):
                 placeholder.markdown(full_response)
 
         except requests.exceptions.RequestException as e:
-            full_response = f"❌ Failed to connect to model server: {e}"
+            full_response = f"Failed to connect to model server: {e}"
             placeholder.error(full_response)
         except Exception as e:
-            full_response = f"❌ Unexpected error: {e}"
+            full_response = f"Unexpected error: {e}"
             placeholder.error(full_response)
 
         if full_response.strip():

@@ -1,4 +1,5 @@
 import hashlib
+import os
 from typing import List, Optional
 
 import chromadb
@@ -18,7 +19,7 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 COLLECTION_NAME = "documents"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-DEFAULT_DB_PATH = "./chroma_db"
+DEFAULT_DB_PATH = os.getenv("CHROMA_DB_PATH", "/chroma_db")
 EMBED_BATCH_SIZE = 32
 
 # ================================
@@ -52,12 +53,6 @@ def _stable_chunk_id(doc_id: str, chunk_index: int, chunk_text: str) -> str:
     digest = hashlib.sha1(chunk_text.encode("utf-8", errors="ignore")).hexdigest()[:12]
     safe_doc_id = doc_id.replace(" ", "_")
     return f"{safe_doc_id}_{chunk_index}_{digest}"
-
-
-def _doc_prefix(doc_id: str) -> str:
-    return f"{doc_id.replace(' ', '_')}_" 
-
-
 # ================================
 # Chunking
 # ================================
