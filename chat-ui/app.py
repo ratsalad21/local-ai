@@ -3,6 +3,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import requests
 import streamlit as st
@@ -26,13 +27,18 @@ VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://vllm:8000/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 
 DOCS_DIR = Path(os.getenv("DOCS_DIR", "/docs"))
+CHAT_HISTORY_DIR = Path(os.getenv("CHAT_HISTORY_DIR", "/chat_history"))
+CHAT_HISTORY_FILE = CHAT_HISTORY_DIR / "current_chat.json"
+
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_CONTEXT_CHARS = 4000
 MAX_HISTORY_MESSAGES = 12
 REQUEST_TIMEOUT = 300
+STATUS_TIMEOUT = 5
 RETRIEVAL_K = 5
 
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
+CHAT_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
 eastern = tz.gettz("America/New_York")
 
@@ -43,6 +49,105 @@ eastern = tz.gettz("America/New_York")
 
 def now_eastern() -> datetime.datetime:
     return datetime.datetime.now(eastern)
+
+
+def serialize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for msg in messages:
+        item = dict(msg)
+        timestamp = item.get("timestamp")
+        if isinstance(timestamp, datetime.datetime):
+            item["timestamp"] = timestamp.isoformat()
+        serialized.append(item)
+    return serialized
+
+
+def deserialize_messages(raw_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    for raw in raw_messages:
+        item = dict(raw)
+        timestamp = item.get("timestamp")
+        if isinstance(timestamp, str):
+            try:
+                item["timestamp"] = datetime.datetime.fromisoformat(timestamp)
+            except ValueError:
+                item["timestamp"] = None
+        messages.append(item)
+    return messages
+
+
+def load_chat_history() -> list[dict[str, Any]]:
+    if not CHAT_HISTORY_FILE.exists():
+        return []
+
+    try:
+        payload = json.loads(CHAT_HISTORY_FILE.read_text(encoding="utf-8"))
+        raw_messages = payload.get("messages", [])
+        return deserialize_messages(raw_messages)
+    except Exception:
+        return []
+
+
+def save_chat_history(messages: list[dict[str, Any]]) -> None:
+    payload = {
+        "saved_at": now_eastern().isoformat(),
+        "messages": serialize_messages(messages),
+    }
+    CHAT_HISTORY_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def clear_chat_history_file() -> None:
+    if CHAT_HISTORY_FILE.exists():
+        CHAT_HISTORY_FILE.unlink()
+
+
+def get_chat_history_status() -> dict[str, Any]:
+    exists = CHAT_HISTORY_FILE.exists()
+    if not exists:
+        return {
+            "exists": False,
+            "message_count": 0,
+            "saved_at": None,
+        }
+
+    try:
+        payload = json.loads(CHAT_HISTORY_FILE.read_text(encoding="utf-8"))
+        saved_at = payload.get("saved_at")
+        message_count = len(payload.get("messages", []))
+        return {
+            "exists": True,
+            "message_count": message_count,
+            "saved_at": saved_at,
+        }
+    except Exception:
+        return {
+            "exists": True,
+            "message_count": 0,
+            "saved_at": None,
+        }
+
+
+def get_model_server_status() -> dict[str, Any]:
+    status = {
+        "reachable": False,
+        "models": [],
+        "error": None,
+    }
+
+    try:
+        response = requests.get(
+            f"{VLLM_API_BASE}/models",
+            timeout=STATUS_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        models = [item.get("id", "unknown") for item in payload.get("data", [])]
+        status["reachable"] = True
+        status["models"] = models
+        return status
+    except Exception as exc:
+        status["error"] = str(exc)
+        return status
 
 
 def render_message_with_code(content: str) -> None:
@@ -149,7 +254,7 @@ def reindex_document(doc_id: str) -> bool:
         return False
 
 
-def build_api_messages(system_prompt: str, messages: list[dict]) -> list[dict]:
+def build_api_messages(system_prompt: str, messages: list[dict[str, Any]]) -> list[dict[str, str]]:
     api_messages = [{"role": "system", "content": system_prompt}]
 
     for msg in messages[-MAX_HISTORY_MESSAGES:]:
@@ -175,7 +280,7 @@ def build_retrieval_system_prompt(base_prompt: str, context: str) -> str:
     )
 
 
-def stream_chat_completion(payload: dict):
+def stream_chat_completion(payload: dict[str, Any]):
     """Call vLLM OpenAI-compatible API and stream the response."""
     full_response = ""
 
@@ -216,7 +321,7 @@ def stream_chat_completion(payload: dict):
 st.set_page_config(page_title="Bonzo - Local AI Chat", page_icon=":dog:", layout="wide")
 
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = load_chat_history()
 
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
@@ -233,6 +338,33 @@ if not st.session_state.messages:
 # ================================
 
 with st.sidebar:
+    model_status = get_model_server_status()
+    indexed_docs = list_indexed_documents()
+    chat_status = get_chat_history_status()
+
+    st.header("Status")
+    st.caption("Current local stack health")
+
+    if model_status["reachable"]:
+        active_model = model_status["models"][0] if model_status["models"] else "unknown"
+        st.success("Model API reachable")
+        st.caption(f"Active model: {active_model}")
+    else:
+        st.error("Model API unavailable")
+        if model_status["error"]:
+            st.caption(model_status["error"])
+
+    st.caption(f"Indexed docs: {len(indexed_docs)}")
+    if chat_status["exists"]:
+        st.caption(f"Saved chat messages: {chat_status['message_count']}")
+        if chat_status["saved_at"]:
+            st.caption(f"Last saved: {chat_status['saved_at']}")
+    else:
+        st.caption("Saved chat: none")
+
+    if st.button("Refresh Status", use_container_width=True):
+        st.rerun()
+
     st.header("Document Upload")
 
     uploaded_file = st.file_uploader("Upload document", type=["txt", "md", "pdf"])
@@ -242,8 +374,7 @@ with st.sidebar:
         if file_key not in st.session_state.processed_files:
             process_uploaded_file(uploaded_file)
             st.session_state.processed_files.add(file_key)
-
-    indexed_docs = list_indexed_documents()
+            st.rerun()
 
     st.header("Knowledge Base")
     st.caption(f"{len(indexed_docs)} indexed document(s)")
@@ -291,7 +422,12 @@ with st.sidebar:
 
     if st.button("Clear Chat History"):
         st.session_state.messages = []
+        clear_chat_history_file()
         st.rerun()
+
+    if st.button("Save Chat Snapshot", use_container_width=True):
+        save_chat_history(st.session_state.messages)
+        st.success("Chat saved")
 
     st.header("Settings")
 
@@ -316,7 +452,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar=avatar):
         render_message_with_code(msg["content"])
 
-        if "timestamp" in msg:
+        if msg.get("timestamp"):
             st.caption(f"_{msg['timestamp'].strftime('%I:%M %p')}_")
         if msg.get("sources"):
             st.caption("Sources: " + ", ".join(msg["sources"]))
@@ -363,10 +499,11 @@ if prompt := st.chat_input("Ask something..."):
                 )
                 st.text(match["text"][:MAX_CONTEXT_CHARS])
 
-    if context:
-        system_prompt = build_retrieval_system_prompt(custom_system_prompt, context)
-    else:
-        system_prompt = custom_system_prompt
+    system_prompt = (
+        build_retrieval_system_prompt(custom_system_prompt, context)
+        if context
+        else custom_system_prompt
+    )
 
     api_messages = build_api_messages(system_prompt, st.session_state.messages)
 
@@ -408,3 +545,4 @@ if prompt := st.chat_input("Ask something..."):
                     "sources": sources,
                 }
             )
+            save_chat_history(st.session_state.messages)

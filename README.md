@@ -13,6 +13,8 @@ This project currently gives you:
 - document upload for `txt`, `md`, and `pdf`
 - persistent local RAG storage with Chroma
 - sidebar controls to inspect, re-index, and remove indexed documents
+- persistent chat history saved to local disk
+- a sidebar status panel for model connectivity and local app state
 - retrieved source display in the chat UI
 - filtered retrieval that reduces duplicate and weak context
 - a simple Docker-first setup for running everything on one machine
@@ -65,6 +67,7 @@ The current compose stack starts:
 - `scripts/rewrite_rag.py`: local helper script from earlier iteration work
 - `docs/`: uploaded documents stored at runtime
 - `chroma_db/`: persisted vector database files
+- `chat_history/`: persisted chat session storage
 - `vllm/cache/`: Hugging Face model cache for the inference container
 - `models/`: reserved local model directory, not currently used by the app code
 
@@ -81,6 +84,7 @@ local-ai/
 |   `-- tests/
 |       `-- test_rag.py
 |-- chroma_db/
+|-- chat_history/
 |-- docs/
 |-- models/
 |-- scripts/
@@ -96,9 +100,10 @@ local-ai/
 
 The Streamlit app in [`chat-ui/app.py`](./chat-ui/app.py):
 
-- keeps chat history in Streamlit session state
+- keeps chat history in Streamlit session state and saves it to disk
 - sends chat requests directly to the vLLM HTTP API
 - supports a custom system prompt, temperature, and max token controls
+- includes a sidebar status panel for API reachability, indexed docs, and saved chat state
 - includes sidebar tools for managing indexed documents
 - can optionally fetch retrieved document context before generation
 - shows retrieved sources and chunk details in the UI
@@ -138,6 +143,7 @@ The current Docker setup lives in [`chat-ui/docker-compose.yml`](./chat-ui/docke
 - `G:/local-ai/vllm/cache:/root/.cache/huggingface`
 - `G:/local-ai/docs:/docs`
 - `G:/local-ai/chroma_db:/chroma_db`
+- `G:/local-ai/chat_history:/chat_history`
 
 These mounts mean the current compose file is tailored to this Windows machine layout and may need small path changes on another system.
 
@@ -149,6 +155,7 @@ The app currently uses these environment variables:
 - `MODEL_NAME` default: `Qwen/Qwen2.5-7B-Instruct`
 - `DOCS_DIR` default: `/docs`
 - `CHROMA_DB_PATH` default: `/chroma_db`
+- `CHAT_HISTORY_DIR` default: `/chat_history`
 
 The vLLM service is also configured with:
 
@@ -175,7 +182,7 @@ The current app code uses `requests` for vLLM calls; `openai` is installed but n
 
 ## Development Notes
 
-- `docs/`, `chroma_db/`, and `vllm/cache/` are runtime data directories, not source directories.
+- `docs/`, `chroma_db/`, `chat_history/`, and `vllm/cache/` are runtime data directories, not source directories.
 - The repo is currently centered on the `chat-ui` application; there is no separate backend service beyond the compose-managed stack.
 - The current Docker setup is still Windows-path-oriented because the compose file mounts `G:/local-ai/...` host directories.
 

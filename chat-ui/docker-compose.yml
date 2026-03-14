@@ -42,11 +42,13 @@ services:
       - .:/app
       - "G:/local-ai/docs:/docs"
       - "G:/local-ai/chroma_db:/chroma_db"
+      - "G:/local-ai/chat_history:/chat_history"
     environment:
       - VLLM_API_BASE=http://vllm:8000/v1
       - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
       - DOCS_DIR=/docs
       - CHROMA_DB_PATH=/chroma_db
+      - CHAT_HISTORY_DIR=/chat_history
       - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
     depends_on:
       - vllm
