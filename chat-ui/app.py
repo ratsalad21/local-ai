@@ -485,6 +485,233 @@ def stream_chat_completion(payload: dict[str, Any], stream_state: dict[str, Any]
                 continue
 
 
+def render_app_chrome(model_status: dict[str, Any], indexed_doc_count: int) -> None:
+    status_label = "ONLINE" if model_status["reachable"] else "OFFLINE"
+    status_class = "online" if model_status["reachable"] else "offline"
+    model_label = st.session_state.selected_model or MODEL_NAME
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background:
+                radial-gradient(circle at top left, rgba(255, 196, 128, 0.18), transparent 28%),
+                radial-gradient(circle at top right, rgba(120, 180, 255, 0.12), transparent 24%),
+                linear-gradient(180deg, #f5efe4 0%, #efe6d5 52%, #e8dcc8 100%);
+        }}
+        [data-testid="stSidebar"] {{
+            background: linear-gradient(180deg, rgba(44, 57, 72, 0.96), rgba(27, 35, 47, 0.98));
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+        }}
+        [data-testid="stSidebar"] * {{
+            color: #f3efe7;
+        }}
+        [data-testid="stSidebar"] h2 {{
+            font-size: 0.92rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(243, 239, 231, 0.78);
+            margin-top: 1.25rem;
+            padding-top: 0.4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }}
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] [data-baseweb="select"] span,
+        [data-testid="stSidebar"] .stCaption {{
+            color: rgba(243, 239, 231, 0.86) !important;
+        }}
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] .stTextInput input,
+        [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] .stFileUploader section {{
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 14px !important;
+        }}
+        [data-testid="stSidebar"] .stButton > button {{
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: linear-gradient(135deg, rgba(255, 213, 146, 0.18), rgba(255, 255, 255, 0.06));
+            color: #fff7ee;
+            font-weight: 700;
+            transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+        }}
+        [data-testid="stSidebar"] .stButton > button:hover {{
+            transform: translateY(-1px);
+            border-color: rgba(255, 219, 171, 0.34);
+            background: linear-gradient(135deg, rgba(255, 213, 146, 0.28), rgba(255, 255, 255, 0.08));
+        }}
+        [data-testid="stChatMessage"] {{
+            background: rgba(255, 251, 244, 0.78);
+            border: 1px solid rgba(120, 96, 66, 0.12);
+            border-radius: 20px;
+            padding: 0.25rem 0.35rem;
+            box-shadow: 0 10px 24px rgba(80, 64, 40, 0.06);
+        }}
+        [data-testid="stChatMessageContent"] {{
+            color: #332617;
+        }}
+        [data-testid="stChatInput"] {{
+            background: rgba(255, 250, 242, 0.92);
+            border: 1px solid rgba(120, 96, 66, 0.14);
+            border-radius: 18px;
+            box-shadow: 0 12px 26px rgba(78, 60, 34, 0.08);
+        }}
+        [data-testid="stChatInput"] textarea {{
+            color: #332617 !important;
+        }}
+        .stSlider [data-baseweb="slider"] > div > div {{
+            background: linear-gradient(90deg, #d88d43, #5f95b5) !important;
+        }}
+        .stCheckbox {{
+            background: rgba(255, 250, 242, 0.65);
+            border: 1px solid rgba(120, 96, 66, 0.12);
+            border-radius: 14px;
+            padding: 0.35rem 0.6rem;
+        }}
+        .bonzo-shell {{
+            padding: 1.2rem 0 0.8rem 0;
+        }}
+        .bonzo-hero {{
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(60, 74, 87, 0.12);
+            border-radius: 24px;
+            padding: 1.4rem 1.5rem 1.25rem;
+            background:
+                radial-gradient(circle at 85% 20%, rgba(255, 211, 148, 0.55), transparent 22%),
+                linear-gradient(135deg, rgba(29, 46, 64, 0.96), rgba(52, 75, 92, 0.92));
+            box-shadow: 0 18px 50px rgba(44, 37, 26, 0.18);
+            color: #f7f3ec;
+            margin-bottom: 1rem;
+        }}
+        .bonzo-kicker {{
+            display: inline-block;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            font-size: 0.73rem;
+            letter-spacing: 0.12em;
+            font-weight: 700;
+        }}
+        .bonzo-title {{
+            margin: 0.85rem 0 0.25rem;
+            font-size: 2.4rem;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+        }}
+        .bonzo-subtitle {{
+            margin: 0;
+            max-width: 48rem;
+            color: rgba(247, 243, 236, 0.84);
+            font-size: 1rem;
+        }}
+        .bonzo-grid {{
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 1.15rem;
+        }}
+        .bonzo-card {{
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 18px;
+            padding: 0.85rem 0.95rem;
+            backdrop-filter: blur(8px);
+        }}
+        .bonzo-label {{
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(247, 243, 236, 0.6);
+            margin-bottom: 0.35rem;
+        }}
+        .bonzo-value {{
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fff8f0;
+            word-break: break-word;
+        }}
+        .bonzo-status {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+        }}
+        .bonzo-status::before {{
+            content: "";
+            width: 0.65rem;
+            height: 0.65rem;
+            border-radius: 999px;
+            display: inline-block;
+        }}
+        .bonzo-status.online::before {{
+            background: #73f0ac;
+            box-shadow: 0 0 0 0.18rem rgba(115, 240, 172, 0.18);
+        }}
+        .bonzo-status.offline::before {{
+            background: #ff8f7d;
+            box-shadow: 0 0 0 0.18rem rgba(255, 143, 125, 0.16);
+        }}
+        .bonzo-banner {{
+            border-radius: 18px;
+            padding: 0.9rem 1rem;
+            background: rgba(255, 249, 238, 0.82);
+            border: 1px solid rgba(123, 96, 54, 0.14);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+            color: #4f3c22;
+            margin-bottom: 0.75rem;
+        }}
+        .bonzo-inline-note {{
+            border-radius: 16px;
+            padding: 0.85rem 0.95rem;
+            background: rgba(255, 248, 235, 0.84);
+            border: 1px solid rgba(120, 96, 66, 0.12);
+            color: #4f3c22;
+            margin-bottom: 0.8rem;
+        }}
+        @media (max-width: 900px) {{
+            .bonzo-grid {{
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }}
+            .bonzo-title {{
+                font-size: 2rem;
+            }}
+        }}
+        </style>
+        <div class="bonzo-shell">
+          <div class="bonzo-hero">
+            <div class="bonzo-kicker">LOCAL INFERENCE CONSOLE</div>
+            <div class="bonzo-title">Bonzo</div>
+            <p class="bonzo-subtitle">
+              Advanced local AI chat with GPU inference, persistent sessions, and document-aware retrieval.
+            </p>
+            <div class="bonzo-grid">
+              <div class="bonzo-card">
+                <div class="bonzo-label">Model Status</div>
+                <div class="bonzo-value bonzo-status {status_class}">{status_label}</div>
+              </div>
+              <div class="bonzo-card">
+                <div class="bonzo-label">Active Model</div>
+                <div class="bonzo-value">{model_label}</div>
+              </div>
+              <div class="bonzo-card">
+                <div class="bonzo-label">Indexed Docs</div>
+                <div class="bonzo-value">{indexed_doc_count}</div>
+              </div>
+              <div class="bonzo-card">
+                <div class="bonzo-label">Inference Stack</div>
+                <div class="bonzo-value">vLLM + Chroma</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 # ================================
 # Streamlit UI Setup
 # ================================
@@ -503,11 +730,25 @@ if "processed_files" not in st.session_state:
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = MODEL_NAME
 
-st.title("Bonzo - Local AI Assistant")
-st.caption("vLLM + Streamlit + Chroma (RAG)")
+model_status = get_model_server_status()
+indexed_docs = list_indexed_documents()
+
+if model_status["reachable"]:
+    available_models = model_status["models"] or [MODEL_NAME]
+    if st.session_state.selected_model not in available_models:
+        st.session_state.selected_model = available_models[0]
+
+render_app_chrome(model_status, len(indexed_docs))
 
 if not st.session_state.messages:
-    st.info("Welcome to Bonzo. Upload documents or start chatting.")
+    st.markdown(
+        """
+        <div class="bonzo-banner">
+          <strong>System Ready.</strong> Upload documents, tune your model settings, or start a fresh conversation with Bonzo.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ================================
@@ -520,8 +761,6 @@ with st.sidebar:
         st.session_state.current_session_id = create_chat_session()
         sessions = list_chat_sessions()
 
-    model_status = get_model_server_status()
-    indexed_docs = list_indexed_documents()
     chat_status = get_chat_session_status(st.session_state.current_session_id)
 
     st.header("Status")
