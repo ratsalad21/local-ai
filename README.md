@@ -4,6 +4,8 @@ Local AI is a self-hosted chat stack for running a local assistant with a Stream
 
 The repo is intentionally small: one app in [`chat-ui`](./chat-ui), a Docker Compose setup for the UI and model server, and local state directories for documents, embeddings, and model cache.
 
+For a full project walkthrough, configuration guide, architecture reference, and troubleshooting manual, see [`docs/PROJECT_GUIDE.md`](./docs/PROJECT_GUIDE.md).
+
 ## Overview
 
 This project currently gives you:
