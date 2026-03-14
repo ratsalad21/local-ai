@@ -224,7 +224,7 @@ with st.sidebar:
 # ================================
 
 for msg in st.session_state.messages:
-    avatar = ":dog:" if msg["role"] == "assistant" else ":bust_in_silhouette:"
+    avatar = "🐶" if msg["role"] == "assistant" else "👤"
 
     with st.chat_message(msg["role"], avatar=avatar):
         render_message_with_code(msg["content"])
@@ -275,7 +275,7 @@ if prompt := st.chat_input("Ask something..."):
         "stream": True,
     }
 
-    with st.chat_message("assistant", avatar=":dog:"):
+    with st.chat_message("assistant", avatar="🐶"):
         placeholder = st.empty()
         full_response = ""
 
