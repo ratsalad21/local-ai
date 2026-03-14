@@ -20,7 +20,11 @@ models/
 vllm/
 
 # docs
-docs/
+docs/*
+!docs/PROJECT_GUIDE.md
+!docs/images/
+docs/images/*
+!docs/images/README.md
 
 # vector database
 chroma/

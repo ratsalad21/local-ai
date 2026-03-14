@@ -27,6 +27,28 @@
 
 For the full project walkthrough, architecture, configuration details, and troubleshooting guide, see [`docs/PROJECT_GUIDE.md`](./docs/PROJECT_GUIDE.md).
 
+## Interface Preview
+
+Drop screenshots into [`docs/images/README.md`](./docs/images/README.md)'s folder using the suggested filenames below, then this section becomes your visual tour.
+
+### Main chat experience
+
+```text
+docs/images/bonzo-main-chat.png
+```
+
+### Sidebar and controls
+
+```text
+docs/images/bonzo-sidebar-controls.png
+```
+
+### Retrieval and sources
+
+```text
+docs/images/bonzo-rag-results.png
+```
+
 ## Quick Start
 
 From [`chat-ui`](./chat-ui):
