@@ -33,13 +33,35 @@ For the full project walkthrough, architecture, configuration details, and troub
 
 ![Bonzo main chat experience](./docs/images/bonzo-main-chat.png)
 
-### Sidebar and controls
+The main view is built for local-first chat: live model responses, persistent conversations, and optional document-aware answers without leaving the browser.
 
-![Bonzo sidebar and controls](./docs/images/bonzo-sidebar-controls.png)
+### Sidebar walkthrough
+
+The sidebar is where Bonzo behaves more like a local control console than a simple chat app.
+
+#### Status and sessions
+
+`Status` surfaces model reachability, indexed-document count, and chat session state. `Sessions` lets you jump between saved conversations, start a fresh one, or remove the current thread.
+
+![Bonzo sidebar status and sessions](./docs/images/bonzo-sidebar-status-sessions.png)
+
+#### Model, upload, and knowledge base
+
+`Model` selects the active vLLM-served model. `Document Upload` ingests local files, while `Knowledge Base` handles re-indexing, removal, and full clears for the stored document set.
+
+![Bonzo sidebar model and knowledge base](./docs/images/bonzo-sidebar-model-kb.png)
+
+#### Explorer and chat settings
+
+`Document Explorer` previews uploaded files and supports lightweight text search. `Chat Controls` and `Settings` handle history resets, snapshots, temperature, output length, and the active system prompt.
+
+![Bonzo sidebar explorer and settings](./docs/images/bonzo-sidebar-explorer-settings.png)
 
 ### Retrieval and sources
 
 ![Bonzo retrieval and sources](./docs/images/bonzo-rag-results.png)
+
+Retrieved chunks are shown with source-aware cards so you can see what context the answer is grounded in and which file the model is drawing from.
 
 ## Quick Start
 
