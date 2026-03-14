@@ -185,6 +185,7 @@ The app currently uses these environment variables:
 - `DOCS_DIR` default: `/docs`
 - `CHROMA_DB_PATH` default: `/chroma_db`
 - `CHAT_HISTORY_DIR` default: `/chat_history`
+- `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`: recommended for model and embedding downloads
 
 The vLLM service is also configured with:
 

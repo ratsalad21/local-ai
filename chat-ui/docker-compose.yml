@@ -49,6 +49,8 @@ services:
       - DOCS_DIR=/docs
       - CHROMA_DB_PATH=/chroma_db
       - CHAT_HISTORY_DIR=/chat_history
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      - HF_TOKEN=${HUGGING_FACE_HUB_TOKEN}
       - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
     depends_on:
       - vllm
