@@ -59,6 +59,28 @@ The current compose stack starts:
 - `vllm` on port `8000`
 - `chat-ui` on port `8501`
 
+## Hardware Requirements
+
+Recommended for the current default setup:
+
+- NVIDIA GPU with at least 16 GB VRAM for comfortable local inference with `Qwen/Qwen2.5-7B-Instruct`
+- 32 GB system RAM
+- modern multi-core CPU
+- SSD storage for the repo, model cache, and vector database
+- Docker with GPU support configured for NVIDIA
+
+Minimum practical baseline:
+
+- NVIDIA GPU with 8 GB to 12 GB VRAM, depending on model choice and vLLM settings
+- 16 GB system RAM
+- enough free disk space for model weights, cache files, documents, and Chroma data
+
+Notes:
+
+- larger models will need substantially more VRAM than the default 7B model
+- RAG and embeddings also consume CPU, RAM, and disk in addition to model inference
+- if you run into memory pressure, lowering model size or vLLM memory settings is usually the first thing to adjust
+
 ## What This Repo Contains
 
 - `chat-ui/app.py`: main Streamlit chat application
