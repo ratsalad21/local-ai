@@ -45,6 +45,5 @@ services:
       - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
       - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
     depends_on:
-      vllm:
-        condition: service_healthy
+      - vllm
     restart: unless-stopped
