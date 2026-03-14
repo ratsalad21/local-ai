@@ -749,10 +749,27 @@ def render_app_chrome(model_status: dict[str, Any], indexed_doc_count: int) -> N
             border: 1px solid rgba(255, 214, 161, 0.14);
         }}
         [data-testid="stExpanderDetails"] {{
-            background: rgba(255, 249, 240, 0.72);
-            border: 1px solid rgba(120, 96, 66, 0.12);
+            background: rgba(255, 244, 229, 0.76);
+            border: 1px solid rgba(120, 96, 66, 0.14);
             border-radius: 0 0 18px 18px;
             padding: 0.85rem 1rem 0.5rem;
+        }}
+        [data-testid="stSidebar"] [data-testid="stExpanderDetails"] {{
+            background: rgba(36, 30, 23, 0.96);
+            border: 1px solid rgba(255, 214, 161, 0.12);
+            color: #fff4e3 !important;
+        }}
+        [data-testid="stSidebar"] [data-testid="stExpanderDetails"] * {{
+            color: #fff4e3 !important;
+        }}
+        [data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stText {{
+            background: rgba(17, 14, 10, 0.72);
+            border: 1px solid rgba(255, 214, 161, 0.1);
+            border-radius: 14px;
+            padding: 0.75rem 0.85rem;
+        }}
+        [data-testid="stSidebar"] [data-testid="stExpanderDetails"] .stText p {{
+            color: #fff4e3 !important;
         }}
         .bonzo-retrieval-card {{
             background: rgba(72, 56, 37, 0.95);
