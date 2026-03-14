@@ -1,6 +1,6 @@
 # Local AI Chat Assistant
 
-[![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-enabled-brightgreen)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
