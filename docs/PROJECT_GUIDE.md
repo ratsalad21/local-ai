@@ -1,15 +1,43 @@
 # Local AI Project Guide
 
-This document is the full operational guide for the `local-ai` project.
+> The full operating manual for `local-ai`: architecture, runtime behavior, configuration, and troubleshooting in one place.
 
-It covers:
+## At A Glance
 
-- what the project does
-- how the architecture fits together
-- what each directory is for
-- how to configure and run the stack
-- how chat, model serving, and RAG work
-- how to troubleshoot common failures
+| Area | Current Value |
+| --- | --- |
+| Default model | `Qwen/Qwen2.5-7B-Instruct` |
+| UI | `http://localhost:8501` |
+| vLLM API | `http://localhost:8000/v1` |
+| Context window | `4096` |
+| Stack style | Docker + Streamlit + vLLM + Chroma |
+| Primary runtime data | `docs/`, `chroma_db/`, `chat_history/`, `vllm/cache/` |
+
+## What's In This Guide
+
+- project summary
+- architecture and request flow
+- repo layout and key files
+- runtime configuration
+- model and token-budget behavior
+- startup and restart commands
+- RAG and persistence behavior
+- troubleshooting and recovery steps
+
+## Quick Navigation
+
+- [Project Summary](#project-summary)
+- [High-Level Architecture](#high-level-architecture)
+- [Main Components](#main-components)
+- [Repository Layout](#repository-layout)
+- [Request Flow](#request-flow)
+- [Current Runtime Configuration](#current-runtime-configuration)
+- [Environment Variables](#environment-variables)
+- [How To Start The Stack](#how-to-start-the-stack)
+- [Troubleshooting](#troubleshooting)
+- [Quick Reference](#quick-reference)
+
+---
 
 ## Project Summary
 
@@ -20,11 +48,13 @@ It covers:
 - optional retrieval-augmented generation (RAG) using Chroma
 - local disk persistence for uploaded documents and chat sessions
 
-The current default model is:
+### Current default model
 
 - `Qwen/Qwen2.5-7B-Instruct`
 
 This project is designed to run on a single machine with Docker and an NVIDIA GPU.
+
+> Why this model: it gives this machine much better VRAM headroom and a far more practical context budget than the earlier 14B setup.
 
 ## High-Level Architecture
 
@@ -45,6 +75,13 @@ uploaded file
 ```
 
 ## Main Components
+
+| Component | Main File | Purpose |
+| --- | --- | --- |
+| Streamlit UI | `chat-ui/app.py` | Chat interface, session state, uploads, prompt building |
+| vLLM server | `chat-ui/docker-compose.yml` | Model serving, OpenAI-compatible API, GPU inference |
+| RAG layer | `chat-ui/rag.py` | Chunking, embeddings, Chroma indexing and retrieval |
+| Runtime storage | `docs/`, `chroma_db/`, `chat_history/`, `vllm/cache/` | Persisted documents, vectors, sessions, and model cache |
 
 ### 1. Streamlit Chat UI
 
@@ -159,27 +196,25 @@ The active compose stack lives in:
 
 - `chat-ui/docker-compose.yml`
 
-### Current Services
+### Runtime Snapshot
 
-- `vllm`
-- `chat-ui`
-
-### Current Ports
-
-- `8000`: vLLM API
-- `8501`: Streamlit UI
-
-### Current Default Model
-
-- `Qwen/Qwen2.5-7B-Instruct`
+| Item | Value |
+| --- | --- |
+| Services | `vllm`, `chat-ui` |
+| UI port | `8501` |
+| API port | `8000` |
+| Default model | `Qwen/Qwen2.5-7B-Instruct` |
+| Compose healthcheck | `python3` request to `/v1/models` |
 
 ### Current vLLM Settings
 
-- `--dtype bfloat16`
-- `--gpu-memory-utilization 0.90`
-- `--max-model-len 4096`
-- `--max-num-batched-tokens 2048`
-- `--max-num-seqs 4`
+| Flag | Value |
+| --- | --- |
+| `--dtype` | `bfloat16` |
+| `--gpu-memory-utilization` | `0.90` |
+| `--max-model-len` | `4096` |
+| `--max-num-batched-tokens` | `2048` |
+| `--max-num-seqs` | `4` |
 
 These settings are intentionally more conservative than the earlier 14B setup and provide much better memory headroom on this machine.
 
@@ -187,39 +222,25 @@ These settings are intentionally more conservative than the earlier 14B setup an
 
 ### `chat-ui` container
 
-- `VLLM_API_BASE`
-  - default: `http://vllm:8000/v1`
-  - used by the Streamlit app to reach the model server
-
-- `MODEL_NAME`
-  - default: `Qwen/Qwen2.5-7B-Instruct`
-  - shown and used as the selected model in the UI
-
-- `VLLM_MAX_MODEL_LEN`
-  - current value: `4096`
-  - used by the UI to limit output tokens and trim request history safely
-
-- `DOCS_DIR`
-  - default: `/docs`
-  - where uploaded documents are stored in the container
-
-- `CHROMA_DB_PATH`
-  - default: `/chroma_db`
-  - where the vector store is persisted
-
-- `CHAT_HISTORY_DIR`
-  - default: `/chat_history`
-  - where chat sessions are saved
-
-- `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`
-  - recommended for model and embedding downloads
+| Variable | Current Value | Purpose |
+| --- | --- | --- |
+| `VLLM_API_BASE` | `http://vllm:8000/v1` | Base URL for model requests |
+| `MODEL_NAME` | `Qwen/Qwen2.5-7B-Instruct` | Default selected model in the UI |
+| `VLLM_MAX_MODEL_LEN` | `4096` | UI-side token budgeting and trimming |
+| `DOCS_DIR` | `/docs` | Uploaded document storage |
+| `CHROMA_DB_PATH` | `/chroma_db` | Vector store location |
+| `CHAT_HISTORY_DIR` | `/chat_history` | Chat session storage |
+| `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN` | user-provided | Hugging Face downloads |
 
 ### `vllm` container
 
-- `HUGGING_FACE_HUB_TOKEN`
-  - used for Hugging Face model access and downloads
+| Variable | Purpose |
+| --- | --- |
+| `HUGGING_FACE_HUB_TOKEN` | model access and downloads |
 
 ## Windows-Specific Mounted Paths
+
+> This compose file is currently tailored to this Windows machine. If the repo moves, update these paths first.
 
 The compose file currently assumes this machine layout:
 
@@ -278,11 +299,12 @@ This was added after the earlier `Qwen/Qwen3-14B` setup caused request-size and 
 
 ## Model Choice Notes
 
-### Current recommendation
+| Model | Outcome On This Machine |
+| --- | --- |
+| `Qwen/Qwen2.5-7B-Instruct` | Stable, healthy startup, useful context headroom |
+| `Qwen/Qwen3-14B` | Too tight on VRAM for comfortable vLLM KV cache and chat usage |
 
-- `Qwen/Qwen2.5-7B-Instruct`
-
-Why it is a better fit:
+### Why the 7B model is the better fit
 
 - much lower VRAM usage than the 14B model
 - much larger usable KV cache
@@ -290,11 +312,7 @@ Why it is a better fit:
 - better room for multi-turn chat and RAG
 - faster and more stable startup
 
-### Previous model
-
-- `Qwen/Qwen3-14B`
-
-Why it caused problems:
+### Why the 14B model caused trouble
 
 - it fit poorly within available GPU headroom on this system
 - after weights loaded, KV cache space was too small
@@ -366,6 +384,8 @@ When changing models, review:
 - `--max-num-seqs`
 
 ## Troubleshooting
+
+> Start with `docker logs --tail 200 vllm-server` and `docker inspect vllm-server --format '{{json .State.Health}}'` for almost every model-serving issue.
 
 ### 1. The chat UI loads, but the model is unavailable
 
@@ -521,6 +541,13 @@ docker compose up -d chat-ui
 
 ## Verification Commands
 
+### Fastest health workflow
+
+1. Check containers.
+2. Check vLLM health.
+3. Check vLLM logs.
+4. Check GPU memory if startup is failing.
+
 These are the fastest commands to check overall health.
 
 ### Container status
@@ -559,13 +586,15 @@ nvidia-smi
 
 ### Current stable local setup
 
-- model: `Qwen/Qwen2.5-7B-Instruct`
-- UI: `http://localhost:8501`
-- API: `http://localhost:8000/v1`
-- vLLM context window: `4096`
-- output trimming: enabled in app
-- RAG persistence: enabled
-- chat persistence: enabled
+| Setting | Value |
+| --- | --- |
+| model | `Qwen/Qwen2.5-7B-Instruct` |
+| UI | `http://localhost:8501` |
+| API | `http://localhost:8000/v1` |
+| vLLM context window | `4096` |
+| output trimming | enabled in app |
+| RAG persistence | enabled |
+| chat persistence | enabled |
 
 ### Most important files
 
