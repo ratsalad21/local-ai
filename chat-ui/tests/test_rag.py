@@ -139,7 +139,7 @@ def test_query_documents_returns_formatted_context_with_sources(patch_rag_module
     assert collection.query_calls == [
         {
             "query_embeddings": [[0.1, 0.2, 0.3]],
-            "n_results": 2,
+            "n_results": 6,
             "include": ["documents", "metadatas", "distances"],
         }
     ]
@@ -156,3 +156,45 @@ def test_query_documents_can_omit_sources(patch_rag_module):
     result = rag.query_documents("what is test?", k=2, include_sources=False)
 
     assert result == "alpha chunk\n\nbeta chunk"
+
+
+def test_search_documents_filters_duplicates_and_far_matches(patch_rag_module):
+    _, collection = patch_rag_module
+    collection.query_result = {
+        "documents": [[
+            "alpha chunk",
+            "alpha chunk",
+            "beta chunk",
+            "gamma chunk",
+        ]],
+        "metadatas": [[
+            {"source": "alpha.md", "chunk": 0, "total_chunks": 4},
+            {"source": "alpha.md", "chunk": 0, "total_chunks": 4},
+            {"source": "alpha.md", "chunk": 1, "total_chunks": 4},
+            {"source": "gamma.md", "chunk": 0, "total_chunks": 1},
+        ]],
+        "distances": [[0.2, 0.2, 0.4, 1.5]],
+    }
+
+    results = rag.search_documents("alpha", k=3, max_distance=1.1, max_per_source=1)
+
+    assert results == [
+        {
+            "source": "alpha.md",
+            "chunk": 0,
+            "total_chunks": 4,
+            "text": "alpha chunk",
+            "distance": 0.2,
+            "similarity": 0.9,
+        }
+    ]
+
+
+def test_list_sources_returns_unique_ordered_sources():
+    matches = [
+        {"source": "alpha.md"},
+        {"source": "beta.md"},
+        {"source": "alpha.md"},
+    ]
+
+    assert rag.list_sources(matches) == ["alpha.md", "beta.md"]

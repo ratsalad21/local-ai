@@ -1,6 +1,6 @@
 import hashlib
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import chromadb
 import torch
@@ -21,6 +21,11 @@ COLLECTION_NAME = "documents"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_DB_PATH = os.getenv("CHROMA_DB_PATH", "/chroma_db")
 EMBED_BATCH_SIZE = 32
+DEFAULT_QUERY_K = 5
+QUERY_CANDIDATE_MULTIPLIER = 3
+MAX_RESULTS_PER_SOURCE = 2
+MAX_DISTANCE = 1.1
+
 
 # ================================
 # Initialization
@@ -53,6 +58,14 @@ def _stable_chunk_id(doc_id: str, chunk_index: int, chunk_text: str) -> str:
     digest = hashlib.sha1(chunk_text.encode("utf-8", errors="ignore")).hexdigest()[:12]
     safe_doc_id = doc_id.replace(" ", "_")
     return f"{safe_doc_id}_{chunk_index}_{digest}"
+
+
+def _similarity_from_distance(distance: Optional[float]) -> Optional[float]:
+    if distance is None:
+        return None
+    return max(0.0, min(1.0, 1.0 - (distance / 2.0)))
+
+
 # ================================
 # Chunking
 # ================================
@@ -109,7 +122,6 @@ def add_document(text: str, doc_id: str) -> int:
     if not chunks:
         raise ValueError("Document produced no valid chunks")
 
-    # Replace existing chunks for this document so re-uploads do not duplicate data
     remove_document(doc_id)
 
     embeddings = embedder.encode(
@@ -120,10 +132,7 @@ def add_document(text: str, doc_id: str) -> int:
         normalize_embeddings=True,
     ).tolist()
 
-    ids = [
-        _stable_chunk_id(doc_id, i, chunk)
-        for i, chunk in enumerate(chunks)
-    ]
+    ids = [_stable_chunk_id(doc_id, i, chunk) for i, chunk in enumerate(chunks)]
 
     metadatas = [
         {
@@ -148,13 +157,18 @@ def add_document(text: str, doc_id: str) -> int:
 # Query
 # ================================
 
-def query_documents(query: str, k: int = 5, include_sources: bool = True) -> str:
-    """Query the vector store and return a formatted context string."""
+def search_documents(
+    query: str,
+    k: int = DEFAULT_QUERY_K,
+    max_distance: float = MAX_DISTANCE,
+    max_per_source: int = MAX_RESULTS_PER_SOURCE,
+) -> List[dict[str, Any]]:
+    """Return filtered retrieval matches with metadata for UI and prompt building."""
     init_rag()
     assert embedder is not None and collection is not None
 
     if not query.strip():
-        return ""
+        return []
 
     q_emb = embedder.encode(
         [query],
@@ -165,28 +179,91 @@ def query_documents(query: str, k: int = 5, include_sources: bool = True) -> str
 
     results = collection.query(
         query_embeddings=[q_emb],
-        n_results=k,
+        n_results=max(k * QUERY_CANDIDATE_MULTIPLIER, k),
         include=["documents", "metadatas", "distances"],
     )
 
     docs = results.get("documents", [[]])[0]
     metadatas = results.get("metadatas", [[]])[0]
+    distances = results.get("distances", [[]])[0]
 
     if not docs:
-        return ""
+        return []
 
-    formatted_chunks: List[str] = []
+    matches: List[dict[str, Any]] = []
+    seen_keys: set[tuple[str, int, str]] = set()
+    per_source_counts: dict[str, int] = {}
 
     for i, doc in enumerate(docs):
         metadata = metadatas[i] if i < len(metadatas) and metadatas[i] else {}
+        distance = distances[i] if i < len(distances) else None
         source = metadata.get("source", "unknown")
-        chunk_num = metadata.get("chunk", "?")
+        chunk_num = metadata.get("chunk", -1)
+        total_chunks = metadata.get("total_chunks")
+
+        if distance is not None and distance > max_distance:
+            continue
+
+        dedupe_key = (source, chunk_num, doc)
+        if dedupe_key in seen_keys:
+            continue
+
+        if per_source_counts.get(source, 0) >= max_per_source:
+            continue
+
+        seen_keys.add(dedupe_key)
+        per_source_counts[source] = per_source_counts.get(source, 0) + 1
+
+        matches.append(
+            {
+                "source": source,
+                "chunk": chunk_num,
+                "total_chunks": total_chunks,
+                "text": doc,
+                "distance": distance,
+                "similarity": _similarity_from_distance(distance),
+            }
+        )
+
+        if len(matches) >= k:
+            break
+
+    return matches
+
+
+def format_retrieval_context(
+    matches: List[dict[str, Any]],
+    include_sources: bool = True,
+) -> str:
+    formatted_chunks: List[str] = []
+
+    for match in matches:
+        doc = match["text"]
+        source = match.get("source", "unknown")
+        chunk_num = match.get("chunk", "?")
 
         if include_sources:
-            formatted_chunks.append(
-                f"[Source: {source} | Chunk: {chunk_num}]\n{doc}"
-            )
+            formatted_chunks.append(f"[Source: {source} | Chunk: {chunk_num}]\n{doc}")
         else:
             formatted_chunks.append(doc)
 
     return "\n\n".join(formatted_chunks)
+
+
+def list_sources(matches: List[dict[str, Any]]) -> List[str]:
+    seen: set[str] = set()
+    sources: List[str] = []
+
+    for match in matches:
+        source = match.get("source")
+        if source and source not in seen:
+            seen.add(source)
+            sources.append(source)
+
+    return sources
+
+
+def query_documents(query: str, k: int = DEFAULT_QUERY_K, include_sources: bool = True) -> str:
+    """Query the vector store and return a formatted context string."""
+    matches = search_documents(query, k=k)
+    return format_retrieval_context(matches, include_sources=include_sources)

@@ -12,6 +12,8 @@ This project currently gives you:
 - streaming responses from a vLLM OpenAI-compatible endpoint
 - document upload for `txt`, `md`, and `pdf`
 - persistent local RAG storage with Chroma
+- retrieved source display in the chat UI
+- filtered retrieval that reduces duplicate and weak context
 - a simple Docker-first setup for running everything on one machine
 
 It is best read in two ways:
@@ -97,6 +99,8 @@ The Streamlit app in [`chat-ui/app.py`](./chat-ui/app.py):
 - sends chat requests directly to the vLLM HTTP API
 - supports a custom system prompt, temperature, and max token controls
 - can optionally fetch retrieved document context before generation
+- shows retrieved sources and chunk details in the UI
+- stores source names alongside assistant replies when RAG is used
 
 The RAG layer in [`chat-ui/rag.py`](./chat-ui/rag.py):
 
@@ -104,6 +108,8 @@ The RAG layer in [`chat-ui/rag.py`](./chat-ui/rag.py):
 - uses `sentence-transformers/all-MiniLM-L6-v2` for embeddings
 - stores vectors in a Chroma collection named `documents`
 - replaces old chunks when a document with the same `doc_id` is uploaded again
+- filters out weaker retrieval matches by distance
+- deduplicates repeated chunks and limits over-representation from a single source
 - returns formatted context with source and chunk metadata
 
 ## Running The Stack

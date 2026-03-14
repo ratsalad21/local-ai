@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 from dateutil import tz
 from pypdf import PdfReader
-from rag import add_document, query_documents
+from rag import add_document, format_retrieval_context, list_sources, search_documents
 
 # ================================
 # Configuration
@@ -22,6 +22,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_CONTEXT_CHARS = 4000
 MAX_HISTORY_MESSAGES = 12
 REQUEST_TIMEOUT = 300
+RETRIEVAL_K = 5
 
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -129,6 +130,18 @@ def build_api_messages(system_prompt: str, messages: list[dict]) -> list[dict]:
     return api_messages
 
 
+def build_retrieval_system_prompt(base_prompt: str, context: str) -> str:
+    if not context:
+        return base_prompt
+
+    return (
+        f"{base_prompt}\n\n"
+        "You may use the retrieved context below if it is relevant. "
+        "When the answer depends on that context, mention the source file names naturally in your answer.\n\n"
+        f"Retrieved context:\n{context[:MAX_CONTEXT_CHARS]}"
+    )
+
+
 def stream_chat_completion(payload: dict):
     """Call vLLM OpenAI-compatible API and stream the response."""
     full_response = ""
@@ -231,6 +244,8 @@ for msg in st.session_state.messages:
 
         if "timestamp" in msg:
             st.caption(f"_{msg['timestamp'].strftime('%I:%M %p')}_")
+        if msg.get("sources"):
+            st.caption("Sources: " + ", ".join(msg["sources"]))
 
 
 # ================================
@@ -246,22 +261,36 @@ if prompt := st.chat_input("Ask something..."):
         }
     )
 
+    retrieval_matches = []
     context = ""
+    sources = []
+
     if use_rag:
         try:
-            context = query_documents(prompt) or ""
+            retrieval_matches = search_documents(prompt, k=RETRIEVAL_K)
+            context = format_retrieval_context(retrieval_matches) if retrieval_matches else ""
+            sources = list_sources(retrieval_matches)
         except Exception as e:
             st.warning(f"RAG search failed: {e}")
 
-    if context and show_context:
-        with st.expander("Retrieved context"):
-            st.text(context[:MAX_CONTEXT_CHARS])
+    if retrieval_matches and show_context:
+        expander_label = f"Retrieved {len(retrieval_matches)} chunks from {len(sources)} document(s)"
+        with st.expander(expander_label):
+            if sources:
+                st.markdown("**Sources:** " + ", ".join(sources))
+
+            for match in retrieval_matches:
+                similarity = match.get("similarity")
+                similarity_text = (
+                    f"{similarity * 100:.0f}% match" if isinstance(similarity, float) else "match"
+                )
+                st.markdown(
+                    f"**{match['source']}** · chunk {match['chunk']} · {similarity_text}"
+                )
+                st.text(match["text"][:MAX_CONTEXT_CHARS])
 
     if context:
-        system_prompt = (
-            f"{custom_system_prompt}\n\n"
-            f"Use the following context if relevant:\n{context[:MAX_CONTEXT_CHARS]}"
-        )
+        system_prompt = build_retrieval_system_prompt(custom_system_prompt, context)
     else:
         system_prompt = custom_system_prompt
 
@@ -294,10 +323,14 @@ if prompt := st.chat_input("Ask something..."):
         if full_response.strip():
             placeholder.markdown(full_response)
 
+            if sources:
+                st.caption("Sources: " + ", ".join(sources))
+
             st.session_state.messages.append(
                 {
                     "role": "assistant",
                     "content": full_response,
                     "timestamp": now_eastern(),
+                    "sources": sources,
                 }
             )
