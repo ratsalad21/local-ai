@@ -12,7 +12,10 @@ This project currently gives you:
 - streaming responses from a vLLM OpenAI-compatible endpoint
 - document upload for `txt`, `md`, and `pdf`
 - persistent local RAG storage with Chroma
+- multiple saved chat sessions
+- live model selection from the available vLLM models
 - sidebar controls to inspect, re-index, and remove indexed documents
+- document preview and text search in the sidebar
 - persistent chat history saved to local disk
 - a sidebar status panel for model connectivity and local app state
 - retrieved source display in the chat UI
@@ -102,9 +105,11 @@ The Streamlit app in [`chat-ui/app.py`](./chat-ui/app.py):
 
 - keeps chat history in Streamlit session state and saves it to disk
 - sends chat requests directly to the vLLM HTTP API
-- supports a custom system prompt, temperature, and max token controls
+- supports model selection, a custom system prompt, temperature, and max token controls
+- supports multiple saved chat sessions
 - includes a sidebar status panel for API reachability, indexed docs, and saved chat state
 - includes sidebar tools for managing indexed documents
+- includes a document explorer with preview and text search
 - can optionally fetch retrieved document context before generation
 - shows retrieved sources and chunk details in the UI
 - stores source names alongside assistant replies when RAG is used

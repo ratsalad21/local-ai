@@ -25,6 +25,7 @@ docs/
 # vector database
 chroma/
 chroma_db/
+chat_history/*.json
 
 # Docker
 *.log

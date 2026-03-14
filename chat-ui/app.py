@@ -28,7 +28,6 @@ MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 
 DOCS_DIR = Path(os.getenv("DOCS_DIR", "/docs"))
 CHAT_HISTORY_DIR = Path(os.getenv("CHAT_HISTORY_DIR", "/chat_history"))
-CHAT_HISTORY_FILE = CHAT_HISTORY_DIR / "current_chat.json"
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_CONTEXT_CHARS = 4000
@@ -36,6 +35,8 @@ MAX_HISTORY_MESSAGES = 12
 REQUEST_TIMEOUT = 300
 STATUS_TIMEOUT = 5
 RETRIEVAL_K = 5
+DOC_PREVIEW_CHARS = 3000
+DOC_SEARCH_RESULTS = 5
 
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 CHAT_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,6 +50,23 @@ eastern = tz.gettz("America/New_York")
 
 def now_eastern() -> datetime.datetime:
     return datetime.datetime.now(eastern)
+
+
+def slugify_session_name(name: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", name.strip().lower()).strip("-")
+    return slug or "chat"
+
+
+def session_file_path(session_id: str) -> Path:
+    return CHAT_HISTORY_DIR / f"{session_id}.json"
+
+
+def derive_session_title(messages: list[dict[str, Any]], fallback: str) -> str:
+    for msg in messages:
+        if msg.get("role") == "user" and msg.get("content"):
+            title = " ".join(str(msg["content"]).split())[:60].strip()
+            return title or fallback
+    return fallback
 
 
 def serialize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -76,34 +94,107 @@ def deserialize_messages(raw_messages: list[dict[str, Any]]) -> list[dict[str, A
     return messages
 
 
-def load_chat_history() -> list[dict[str, Any]]:
-    if not CHAT_HISTORY_FILE.exists():
+def list_chat_sessions() -> list[dict[str, Any]]:
+    sessions: list[dict[str, Any]] = []
+    for path in sorted(CHAT_HISTORY_DIR.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            sessions.append(
+                {
+                    "id": path.stem,
+                    "title": payload.get("title") or path.stem,
+                    "saved_at": payload.get("saved_at"),
+                    "created_at": payload.get("created_at"),
+                    "message_count": len(payload.get("messages", [])),
+                }
+            )
+        except Exception:
+            sessions.append(
+                {
+                    "id": path.stem,
+                    "title": path.stem,
+                    "saved_at": None,
+                    "created_at": None,
+                    "message_count": 0,
+                }
+            )
+
+    sessions.sort(
+        key=lambda item: item.get("saved_at") or item.get("created_at") or "",
+        reverse=True,
+    )
+    return sessions
+
+
+def create_chat_session(title: str | None = None) -> str:
+    timestamp = now_eastern()
+    base = slugify_session_name(title or timestamp.strftime("chat-%Y%m%d-%H%M%S"))
+    session_id = base
+    counter = 2
+
+    while session_file_path(session_id).exists():
+        session_id = f"{base}-{counter}"
+        counter += 1
+
+    payload = {
+        "title": title or f"Chat {timestamp.strftime('%Y-%m-%d %H:%M')}",
+        "created_at": timestamp.isoformat(),
+        "saved_at": timestamp.isoformat(),
+        "messages": [],
+    }
+    session_file_path(session_id).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return session_id
+
+
+def ensure_active_session() -> str:
+    sessions = list_chat_sessions()
+    if sessions:
+        return sessions[0]["id"]
+    return create_chat_session()
+
+
+def load_chat_session(session_id: str) -> list[dict[str, Any]]:
+    path = session_file_path(session_id)
+    if not path.exists():
         return []
 
     try:
-        payload = json.loads(CHAT_HISTORY_FILE.read_text(encoding="utf-8"))
-        raw_messages = payload.get("messages", [])
-        return deserialize_messages(raw_messages)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return deserialize_messages(payload.get("messages", []))
     except Exception:
         return []
 
 
-def save_chat_history(messages: list[dict[str, Any]]) -> None:
+def save_chat_session(session_id: str, messages: list[dict[str, Any]]) -> None:
+    path = session_file_path(session_id)
+    previous_payload: dict[str, Any] = {}
+    if path.exists():
+        try:
+            previous_payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            previous_payload = {}
+
+    title = derive_session_title(messages, previous_payload.get("title") or session_id)
     payload = {
+        "title": title,
+        "created_at": previous_payload.get("created_at") or now_eastern().isoformat(),
         "saved_at": now_eastern().isoformat(),
         "messages": serialize_messages(messages),
     }
-    CHAT_HISTORY_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def clear_chat_history_file() -> None:
-    if CHAT_HISTORY_FILE.exists():
-        CHAT_HISTORY_FILE.unlink()
+def delete_chat_session(session_id: str) -> bool:
+    path = session_file_path(session_id)
+    if path.exists():
+        path.unlink()
+        return True
+    return False
 
 
-def get_chat_history_status() -> dict[str, Any]:
-    exists = CHAT_HISTORY_FILE.exists()
-    if not exists:
+def get_chat_session_status(session_id: str) -> dict[str, Any]:
+    path = session_file_path(session_id)
+    if not path.exists():
         return {
             "exists": False,
             "message_count": 0,
@@ -111,19 +202,19 @@ def get_chat_history_status() -> dict[str, Any]:
         }
 
     try:
-        payload = json.loads(CHAT_HISTORY_FILE.read_text(encoding="utf-8"))
-        saved_at = payload.get("saved_at")
-        message_count = len(payload.get("messages", []))
+        payload = json.loads(path.read_text(encoding="utf-8"))
         return {
             "exists": True,
-            "message_count": message_count,
-            "saved_at": saved_at,
+            "message_count": len(payload.get("messages", [])),
+            "saved_at": payload.get("saved_at"),
+            "title": payload.get("title"),
         }
     except Exception:
         return {
             "exists": True,
             "message_count": 0,
             "saved_at": None,
+            "title": session_id,
         }
 
 
@@ -135,15 +226,11 @@ def get_model_server_status() -> dict[str, Any]:
     }
 
     try:
-        response = requests.get(
-            f"{VLLM_API_BASE}/models",
-            timeout=STATUS_TIMEOUT,
-        )
+        response = requests.get(f"{VLLM_API_BASE}/models", timeout=STATUS_TIMEOUT)
         response.raise_for_status()
         payload = response.json()
-        models = [item.get("id", "unknown") for item in payload.get("data", [])]
         status["reachable"] = True
-        status["models"] = models
+        status["models"] = [item.get("id", "unknown") for item in payload.get("data", [])]
         return status
     except Exception as exc:
         status["error"] = str(exc)
@@ -166,7 +253,6 @@ def render_message_with_code(content: str) -> None:
 
 
 def save_uploaded_file(uploaded_file) -> Path:
-    """Save uploaded file to the configured docs directory."""
     file_path = DOCS_DIR / uploaded_file.name
     file_path.write_bytes(uploaded_file.getbuffer())
     return file_path
@@ -181,7 +267,6 @@ def delete_saved_file(doc_id: str) -> bool:
 
 
 def extract_text_from_pdf(file_path: Path) -> str:
-    """Extract text from a PDF file."""
     with open(file_path, "rb") as f:
         reader = PdfReader(f)
 
@@ -201,7 +286,6 @@ def extract_text_from_pdf(file_path: Path) -> str:
 
 
 def extract_text(file_path: Path) -> str:
-    """Extract text from supported documents."""
     if file_path.suffix.lower() == ".pdf":
         return extract_text_from_pdf(file_path)
 
@@ -210,7 +294,6 @@ def extract_text(file_path: Path) -> str:
 
 
 def process_uploaded_file(uploaded_file) -> None:
-    """Main RAG ingestion pipeline."""
     file_bytes = uploaded_file.getbuffer()
     file_size = len(file_bytes)
 
@@ -232,7 +315,6 @@ def process_uploaded_file(uploaded_file) -> None:
             chunk_count = add_document(text, doc_id=uploaded_file.name)
 
         st.success(f"{uploaded_file.name} added to knowledge base ({chunk_count} chunks)")
-
     except Exception as e:
         st.error(f"Failed to process file: {e}")
 
@@ -252,6 +334,57 @@ def reindex_document(doc_id: str) -> bool:
     except Exception as e:
         st.error(f"Failed to re-index {doc_id}: {e}")
         return False
+
+
+def list_saved_documents() -> list[str]:
+    return sorted([path.name for path in DOCS_DIR.iterdir() if path.is_file()], key=str.lower)
+
+
+def get_document_preview(doc_id: str, max_chars: int = DOC_PREVIEW_CHARS) -> str:
+    file_path = DOCS_DIR / doc_id
+    if not file_path.exists():
+        return ""
+
+    try:
+        text = extract_text(file_path)
+    except Exception as exc:
+        return f"Failed to preview document: {exc}"
+
+    text = text.strip()
+    if not text:
+        return "Document is empty."
+    return text[:max_chars]
+
+
+def search_document_text(doc_id: str, query: str, max_results: int = DOC_SEARCH_RESULTS) -> list[str]:
+    if not query.strip():
+        return []
+
+    file_path = DOCS_DIR / doc_id
+    if not file_path.exists():
+        return []
+
+    try:
+        text = extract_text(file_path)
+    except Exception:
+        return []
+
+    lower_text = text.lower()
+    lower_query = query.lower()
+    matches: list[str] = []
+    start = 0
+
+    while len(matches) < max_results:
+        index = lower_text.find(lower_query, start)
+        if index == -1:
+            break
+        snippet_start = max(0, index - 120)
+        snippet_end = min(len(text), index + len(query) + 180)
+        snippet = text[snippet_start:snippet_end].replace("\n", " ").strip()
+        matches.append(snippet)
+        start = index + len(query)
+
+    return matches
 
 
 def build_api_messages(system_prompt: str, messages: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -281,7 +414,6 @@ def build_retrieval_system_prompt(base_prompt: str, context: str) -> str:
 
 
 def stream_chat_completion(payload: dict[str, Any]):
-    """Call vLLM OpenAI-compatible API and stream the response."""
     full_response = ""
 
     with requests.post(
@@ -293,14 +425,10 @@ def stream_chat_completion(payload: dict[str, Any]):
         response.raise_for_status()
 
         for line in response.iter_lines():
-            if not line:
-                continue
-
-            if not line.startswith(b"data: "):
+            if not line or not line.startswith(b"data: "):
                 continue
 
             data = line[len(b"data: ") :]
-
             if data == b"[DONE]":
                 break
 
@@ -320,11 +448,17 @@ def stream_chat_completion(payload: dict[str, Any]):
 
 st.set_page_config(page_title="Bonzo - Local AI Chat", page_icon=":dog:", layout="wide")
 
+if "current_session_id" not in st.session_state:
+    st.session_state.current_session_id = ensure_active_session()
+
 if "messages" not in st.session_state:
-    st.session_state.messages = load_chat_history()
+    st.session_state.messages = load_chat_session(st.session_state.current_session_id)
 
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
+
+if "selected_model" not in st.session_state:
+    st.session_state.selected_model = MODEL_NAME
 
 st.title("Bonzo - Local AI Assistant")
 st.caption("vLLM + Streamlit + Chroma (RAG)")
@@ -338,35 +472,83 @@ if not st.session_state.messages:
 # ================================
 
 with st.sidebar:
+    sessions = list_chat_sessions()
+    if not sessions:
+        st.session_state.current_session_id = create_chat_session()
+        sessions = list_chat_sessions()
+
     model_status = get_model_server_status()
     indexed_docs = list_indexed_documents()
-    chat_status = get_chat_history_status()
+    chat_status = get_chat_session_status(st.session_state.current_session_id)
 
     st.header("Status")
     st.caption("Current local stack health")
 
     if model_status["reachable"]:
-        active_model = model_status["models"][0] if model_status["models"] else "unknown"
+        available_models = model_status["models"] or [MODEL_NAME]
+        if st.session_state.selected_model not in available_models:
+            st.session_state.selected_model = available_models[0]
         st.success("Model API reachable")
-        st.caption(f"Active model: {active_model}")
+        st.caption(f"Loaded models: {len(available_models)}")
     else:
+        available_models = [MODEL_NAME]
         st.error("Model API unavailable")
         if model_status["error"]:
             st.caption(model_status["error"])
 
     st.caption(f"Indexed docs: {len(indexed_docs)}")
+    st.caption(f"Chat sessions: {len(sessions)}")
     if chat_status["exists"]:
-        st.caption(f"Saved chat messages: {chat_status['message_count']}")
+        st.caption(f"Saved messages: {chat_status['message_count']}")
         if chat_status["saved_at"]:
             st.caption(f"Last saved: {chat_status['saved_at']}")
-    else:
-        st.caption("Saved chat: none")
 
     if st.button("Refresh Status", use_container_width=True):
         st.rerun()
 
-    st.header("Document Upload")
+    st.header("Sessions")
+    session_options = {f"{item['title']} ({item['message_count']})": item["id"] for item in sessions}
+    current_session_label = next(
+        (label for label, session_id in session_options.items() if session_id == st.session_state.current_session_id),
+        next(iter(session_options)),
+    )
+    selected_session_label = st.selectbox("Chat sessions", list(session_options.keys()), index=list(session_options.keys()).index(current_session_label))
+    selected_session_id = session_options[selected_session_label]
 
+    if selected_session_id != st.session_state.current_session_id:
+        st.session_state.current_session_id = selected_session_id
+        st.session_state.messages = load_chat_session(selected_session_id)
+        st.rerun()
+
+    if st.button("New Chat Session", use_container_width=True):
+        new_session_id = create_chat_session()
+        st.session_state.current_session_id = new_session_id
+        st.session_state.messages = []
+        st.rerun()
+
+    if st.button("Delete Current Session", use_container_width=True):
+        deleted_id = st.session_state.current_session_id
+        if delete_chat_session(deleted_id):
+            remaining_sessions = list_chat_sessions()
+            if remaining_sessions:
+                st.session_state.current_session_id = remaining_sessions[0]["id"]
+                st.session_state.messages = load_chat_session(st.session_state.current_session_id)
+            else:
+                st.session_state.current_session_id = create_chat_session()
+                st.session_state.messages = []
+            st.success("Deleted chat session")
+            st.rerun()
+
+    st.header("Model")
+    selected_model = st.selectbox(
+        "Active model",
+        available_models,
+        index=available_models.index(st.session_state.selected_model) if st.session_state.selected_model in available_models else 0,
+    )
+    st.session_state.selected_model = selected_model
+    st.caption(f"Requests will use: {st.session_state.selected_model}")
+
+    st.header("Document Upload")
     uploaded_file = st.file_uploader("Upload document", type=["txt", "md", "pdf"])
 
     if uploaded_file is not None:
@@ -394,11 +576,8 @@ with st.sidebar:
         if st.button("Remove Selected Document", use_container_width=True):
             removed_from_index = remove_document(selected_doc)
             removed_file = delete_saved_file(selected_doc)
-
             st.session_state.processed_files = {
-                key
-                for key in st.session_state.processed_files
-                if not key.startswith(f"{selected_doc}:")
+                key for key in st.session_state.processed_files if not key.startswith(f"{selected_doc}:")
             }
 
             if removed_from_index or removed_file:
@@ -415,6 +594,28 @@ with st.sidebar:
     else:
         st.caption("No indexed documents yet.")
 
+    st.header("Document Explorer")
+    saved_docs = list_saved_documents()
+    if saved_docs:
+        explorer_doc = st.selectbox("Saved documents", saved_docs)
+        preview_text = get_document_preview(explorer_doc)
+        if preview_text:
+            with st.expander("Preview document"):
+                st.text(preview_text)
+
+        doc_search_query = st.text_input("Search inside document", key="doc_search_query")
+        if doc_search_query.strip():
+            matches = search_document_text(explorer_doc, doc_search_query)
+            if matches:
+                st.caption(f"Found {len(matches)} match(es)")
+                for idx, snippet in enumerate(matches, start=1):
+                    st.markdown(f"**Match {idx}**")
+                    st.text(snippet)
+            else:
+                st.caption("No matches found.")
+    else:
+        st.caption("No saved documents available for preview yet.")
+
     use_rag = st.checkbox("Use document search (RAG)", value=True)
     show_context = st.checkbox("Show retrieved context", value=True)
 
@@ -422,18 +623,16 @@ with st.sidebar:
 
     if st.button("Clear Chat History"):
         st.session_state.messages = []
-        clear_chat_history_file()
+        save_chat_session(st.session_state.current_session_id, st.session_state.messages)
         st.rerun()
 
     if st.button("Save Chat Snapshot", use_container_width=True):
-        save_chat_history(st.session_state.messages)
+        save_chat_session(st.session_state.current_session_id, st.session_state.messages)
         st.success("Chat saved")
 
     st.header("Settings")
-
     temperature = st.slider("Temperature", 0.0, 2.0, 0.7)
     max_tokens = st.slider("Max Tokens", 100, 2048, 1024)
-
     custom_system_prompt = st.text_area(
         "System Prompt",
         "You are a helpful local AI assistant named Bonzo. "
@@ -447,7 +646,7 @@ with st.sidebar:
 # ================================
 
 for msg in st.session_state.messages:
-    avatar = "🐶" if msg["role"] == "assistant" else "👤"
+    avatar = "B" if msg["role"] == "assistant" else "U"
 
     with st.chat_message(msg["role"], avatar=avatar):
         render_message_with_code(msg["content"])
@@ -494,28 +693,21 @@ if prompt := st.chat_input("Ask something..."):
                 similarity_text = (
                     f"{similarity * 100:.0f}% match" if isinstance(similarity, float) else "match"
                 )
-                st.markdown(
-                    f"**{match['source']}** - chunk {match['chunk']} - {similarity_text}"
-                )
+                st.markdown(f"**{match['source']}** - chunk {match['chunk']} - {similarity_text}")
                 st.text(match["text"][:MAX_CONTEXT_CHARS])
 
-    system_prompt = (
-        build_retrieval_system_prompt(custom_system_prompt, context)
-        if context
-        else custom_system_prompt
-    )
-
+    system_prompt = build_retrieval_system_prompt(custom_system_prompt, context) if context else custom_system_prompt
     api_messages = build_api_messages(system_prompt, st.session_state.messages)
 
     payload = {
-        "model": MODEL_NAME,
+        "model": st.session_state.selected_model,
         "temperature": temperature,
         "max_tokens": max_tokens,
         "messages": api_messages,
         "stream": True,
     }
 
-    with st.chat_message("assistant", avatar="🐶"):
+    with st.chat_message("assistant", avatar="B"):
         placeholder = st.empty()
         full_response = ""
 
@@ -523,7 +715,6 @@ if prompt := st.chat_input("Ask something..."):
             for partial_response in stream_chat_completion(payload):
                 full_response = partial_response
                 placeholder.markdown(full_response)
-
         except requests.exceptions.RequestException as e:
             full_response = f"Failed to connect to model server: {e}"
             placeholder.error(full_response)
@@ -533,7 +724,6 @@ if prompt := st.chat_input("Ask something..."):
 
         if full_response.strip():
             placeholder.markdown(full_response)
-
             if sources:
                 st.caption("Sources: " + ", ".join(sources))
 
@@ -543,6 +733,7 @@ if prompt := st.chat_input("Ask something..."):
                     "content": full_response,
                     "timestamp": now_eastern(),
                     "sources": sources,
+                    "model": st.session_state.selected_model,
                 }
             )
-            save_chat_history(st.session_state.messages)
+            save_chat_session(st.session_state.current_session_id, st.session_state.messages)
