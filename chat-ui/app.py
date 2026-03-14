@@ -24,14 +24,15 @@ from rag import (
 # ================================
 
 VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://vllm:8000/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
+VLLM_MAX_MODEL_LEN = int(os.getenv("VLLM_MAX_MODEL_LEN", "4096"))
 
 DOCS_DIR = Path(os.getenv("DOCS_DIR", "/docs"))
 CHAT_HISTORY_DIR = Path(os.getenv("CHAT_HISTORY_DIR", "/chat_history"))
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-MAX_CONTEXT_CHARS = 4000
-MAX_HISTORY_MESSAGES = 12
+MAX_CONTEXT_CHARS = 2000
+MAX_HISTORY_MESSAGES = 8
 REQUEST_TIMEOUT = 300
 STATUS_TIMEOUT = 5
 RETRIEVAL_K = 5
@@ -41,6 +42,9 @@ DEFAULT_TOP_P = 0.8
 DEFAULT_TOP_K = 20
 DEFAULT_PRESENCE_PENALTY = 1.5
 DEFAULT_ENABLE_THINKING = False
+MIN_OUTPUT_TOKENS = 64
+DEFAULT_OUTPUT_TOKENS = 256
+APPROX_CHARS_PER_TOKEN = 4
 
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 CHAT_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -405,6 +409,35 @@ def build_api_messages(system_prompt: str, messages: list[dict[str, Any]]) -> li
     return api_messages
 
 
+def estimate_text_tokens(text: str) -> int:
+    if not text:
+        return 0
+    return max(1, (len(text) + APPROX_CHARS_PER_TOKEN - 1) // APPROX_CHARS_PER_TOKEN)
+
+
+def estimate_messages_tokens(messages: list[dict[str, str]]) -> int:
+    # Keep the heuristic simple and biased slightly high to avoid vLLM token-limit errors.
+    return sum(estimate_text_tokens(msg.get("content", "")) + 12 for msg in messages)
+
+
+def fit_messages_to_budget(
+    system_prompt: str,
+    messages: list[dict[str, Any]],
+    requested_output_tokens: int,
+) -> tuple[list[dict[str, str]], int]:
+    output_tokens = max(MIN_OUTPUT_TOKENS, min(requested_output_tokens, VLLM_MAX_MODEL_LEN // 2))
+    budget = max(MIN_OUTPUT_TOKENS, VLLM_MAX_MODEL_LEN - output_tokens - 32)
+    recent_messages = messages[-MAX_HISTORY_MESSAGES:]
+
+    while recent_messages:
+        api_messages = build_api_messages(system_prompt, recent_messages)
+        if estimate_messages_tokens(api_messages) <= budget:
+            return api_messages, output_tokens
+        recent_messages = recent_messages[2:]
+
+    return build_api_messages(system_prompt, messages[-1:]), output_tokens
+
+
 def build_retrieval_system_prompt(base_prompt: str, context: str) -> str:
     if not context:
         return base_prompt
@@ -636,7 +669,12 @@ with st.sidebar:
 
     st.header("Settings")
     temperature = st.slider("Temperature", 0.0, 2.0, 0.7)
-    max_tokens = st.slider("Max Tokens", 100, 2048, 1024)
+    max_tokens = st.slider(
+        "Max Tokens",
+        MIN_OUTPUT_TOKENS,
+        min(512, max(MIN_OUTPUT_TOKENS, VLLM_MAX_MODEL_LEN // 2)),
+        min(DEFAULT_OUTPUT_TOKENS, max(MIN_OUTPUT_TOKENS, VLLM_MAX_MODEL_LEN // 3)),
+    )
     custom_system_prompt = st.text_area(
         "System Prompt",
         "You are a helpful local AI assistant named Bonzo. "
@@ -701,14 +739,25 @@ if prompt := st.chat_input("Ask something..."):
                 st.text(match["text"][:MAX_CONTEXT_CHARS])
 
     system_prompt = build_retrieval_system_prompt(custom_system_prompt, context) if context else custom_system_prompt
-    api_messages = build_api_messages(system_prompt, st.session_state.messages)
+    api_messages, adjusted_max_tokens = fit_messages_to_budget(
+        system_prompt,
+        st.session_state.messages,
+        max_tokens,
+    )
+
+    if adjusted_max_tokens != max_tokens:
+        st.caption(f"Adjusted max tokens to {adjusted_max_tokens} to fit the current model context window.")
+
+    trimmed_message_count = len(st.session_state.messages) - (len(api_messages) - 1)
+    if trimmed_message_count > 0:
+        st.caption(f"Trimmed {trimmed_message_count} earlier message(s) to fit the current model context window.")
 
     payload = {
         "model": st.session_state.selected_model,
         "temperature": temperature,
         "top_p": DEFAULT_TOP_P,
         "presence_penalty": DEFAULT_PRESENCE_PENALTY,
-        "max_tokens": max_tokens,
+        "max_tokens": adjusted_max_tokens,
         "messages": api_messages,
         "stream": True,
         "chat_template_kwargs": {"enable_thinking": DEFAULT_ENABLE_THINKING},
