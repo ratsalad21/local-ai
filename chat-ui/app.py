@@ -8,7 +8,15 @@ import requests
 import streamlit as st
 from dateutil import tz
 from pypdf import PdfReader
-from rag import add_document, format_retrieval_context, list_sources, search_documents
+from rag import (
+    add_document,
+    clear_documents,
+    format_retrieval_context,
+    list_indexed_documents,
+    list_sources,
+    remove_document,
+    search_documents,
+)
 
 # ================================
 # Configuration
@@ -57,6 +65,14 @@ def save_uploaded_file(uploaded_file) -> Path:
     file_path = DOCS_DIR / uploaded_file.name
     file_path.write_bytes(uploaded_file.getbuffer())
     return file_path
+
+
+def delete_saved_file(doc_id: str) -> bool:
+    file_path = DOCS_DIR / doc_id
+    if file_path.exists():
+        file_path.unlink()
+        return True
+    return False
 
 
 def extract_text_from_pdf(file_path: Path) -> str:
@@ -108,12 +124,29 @@ def process_uploaded_file(uploaded_file) -> None:
             st.warning("Large document detected. Processing may take longer.")
 
         with st.spinner("Generating embeddings..."):
-            add_document(text, doc_id=uploaded_file.name)
+            chunk_count = add_document(text, doc_id=uploaded_file.name)
 
-        st.success(f"{uploaded_file.name} added to knowledge base")
+        st.success(f"{uploaded_file.name} added to knowledge base ({chunk_count} chunks)")
 
     except Exception as e:
         st.error(f"Failed to process file: {e}")
+
+
+def reindex_document(doc_id: str) -> bool:
+    file_path = DOCS_DIR / doc_id
+    if not file_path.exists():
+        st.error(f"Could not find {doc_id} in {DOCS_DIR}")
+        return False
+
+    try:
+        with st.spinner(f"Re-indexing {doc_id}..."):
+            text = extract_text(file_path)
+            chunk_count = add_document(text, doc_id=doc_id)
+        st.success(f"Re-indexed {doc_id} ({chunk_count} chunks)")
+        return True
+    except Exception as e:
+        st.error(f"Failed to re-index {doc_id}: {e}")
+        return False
 
 
 def build_api_messages(system_prompt: str, messages: list[dict]) -> list[dict]:
@@ -210,6 +243,47 @@ with st.sidebar:
             process_uploaded_file(uploaded_file)
             st.session_state.processed_files.add(file_key)
 
+    indexed_docs = list_indexed_documents()
+
+    st.header("Knowledge Base")
+    st.caption(f"{len(indexed_docs)} indexed document(s)")
+
+    if indexed_docs:
+        options = [doc["source"] for doc in indexed_docs]
+        selected_doc = st.selectbox("Indexed documents", options)
+        selected_entry = next(doc for doc in indexed_docs if doc["source"] == selected_doc)
+
+        chunk_total = selected_entry.get("total_chunks") or selected_entry["chunks"]
+        st.caption(f"Chunks: {selected_entry['chunks']} stored / {chunk_total} expected")
+
+        if st.button("Re-index Selected Document", use_container_width=True):
+            if reindex_document(selected_doc):
+                st.rerun()
+
+        if st.button("Remove Selected Document", use_container_width=True):
+            removed_from_index = remove_document(selected_doc)
+            removed_file = delete_saved_file(selected_doc)
+
+            st.session_state.processed_files = {
+                key
+                for key in st.session_state.processed_files
+                if not key.startswith(f"{selected_doc}:")
+            }
+
+            if removed_from_index or removed_file:
+                st.success(f"Removed {selected_doc}")
+                st.rerun()
+            else:
+                st.warning(f"No stored data found for {selected_doc}")
+
+        if st.button("Clear Indexed Knowledge Base", use_container_width=True):
+            deleted_chunks = clear_documents()
+            st.session_state.processed_files = set()
+            st.success(f"Cleared indexed knowledge base ({deleted_chunks} chunks removed)")
+            st.rerun()
+    else:
+        st.caption("No indexed documents yet.")
+
     use_rag = st.checkbox("Use document search (RAG)", value=True)
     show_context = st.checkbox("Show retrieved context", value=True)
 
@@ -285,7 +359,7 @@ if prompt := st.chat_input("Ask something..."):
                     f"{similarity * 100:.0f}% match" if isinstance(similarity, float) else "match"
                 )
                 st.markdown(
-                    f"**{match['source']}** · chunk {match['chunk']} · {similarity_text}"
+                    f"**{match['source']}** - chunk {match['chunk']} - {similarity_text}"
                 )
                 st.text(match["text"][:MAX_CONTEXT_CHARS])
 

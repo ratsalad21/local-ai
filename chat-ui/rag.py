@@ -91,10 +91,10 @@ def chunk_text(text: str) -> List[str]:
 
 
 # ================================
-# Add / Replace Document
+# Document Management
 # ================================
 
-def remove_document(doc_id: str) -> None:
+def remove_document(doc_id: str) -> bool:
     """Remove all chunks associated with a document."""
     init_rag()
     assert collection is not None
@@ -107,7 +107,58 @@ def remove_document(doc_id: str) -> None:
     ids = existing.get("ids", [])
     if ids:
         collection.delete(ids=ids)
+        return True
 
+    return False
+
+
+def list_indexed_documents() -> List[dict[str, Any]]:
+    """Return indexed documents with chunk counts."""
+    init_rag()
+    assert collection is not None
+
+    results = collection.get(include=["metadatas"])
+    metadatas = results.get("metadatas", []) or []
+
+    docs: dict[str, dict[str, Any]] = {}
+    for metadata in metadatas:
+        if not metadata:
+            continue
+
+        source = metadata.get("source")
+        if not source:
+            continue
+
+        doc_entry = docs.setdefault(
+            source,
+            {
+                "source": source,
+                "chunks": 0,
+                "total_chunks": metadata.get("total_chunks"),
+            },
+        )
+        doc_entry["chunks"] += 1
+        if metadata.get("total_chunks") is not None:
+            doc_entry["total_chunks"] = metadata.get("total_chunks")
+
+    return sorted(docs.values(), key=lambda item: item["source"].lower())
+
+
+def clear_documents() -> int:
+    """Remove all indexed documents and return the number of deleted chunks."""
+    init_rag()
+    assert collection is not None
+
+    results = collection.get(include=[])
+    ids = results.get("ids", []) or []
+    if ids:
+        collection.delete(ids=ids)
+    return len(ids)
+
+
+# ================================
+# Add / Replace Document
+# ================================
 
 def add_document(text: str, doc_id: str) -> int:
     """

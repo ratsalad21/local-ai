@@ -36,6 +36,10 @@ class DummyCollection:
             "metadatas": [[]],
             "distances": [[]],
         }
+        self.get_result = {
+            "ids": [],
+            "metadatas": [],
+        }
 
     def add(self, ids, documents, embeddings, metadatas):
         self.add_calls.append(
@@ -47,9 +51,11 @@ class DummyCollection:
             }
         )
 
-    def get(self, where, include):
+    def get(self, where=None, include=None):
         self.get_calls.append({"where": where, "include": include})
-        return {"ids": self.ids_to_return}
+        if where == {"source": "test doc"}:
+            return {"ids": self.ids_to_return}
+        return self.get_result
 
     def delete(self, ids):
         self.delete_calls.append(ids)
@@ -95,7 +101,7 @@ def test_add_document_chunks_and_replaces_existing_entries(patch_rag_module):
     stored_chunks = rag.add_document(text, doc_id="test doc")
 
     assert stored_chunks == 1
-    assert collection.get_calls == [{"where": {"source": "test doc"}, "include": []}]
+    assert collection.get_calls[0] == {"where": {"source": "test doc"}, "include": []}
     assert collection.delete_calls == [["existing-chunk"]]
 
     assert len(collection.add_calls) == 1
@@ -116,6 +122,38 @@ def test_add_document_rejects_empty_chunks(patch_rag_module):
         rag.add_document("short text", doc_id="tiny")
 
     assert collection.add_calls == []
+
+
+def test_list_indexed_documents_groups_by_source(patch_rag_module):
+    _, collection = patch_rag_module
+    collection.get_result = {
+        "ids": ["a", "b", "c"],
+        "metadatas": [
+            {"source": "beta.md", "chunk": 0, "total_chunks": 2},
+            {"source": "beta.md", "chunk": 1, "total_chunks": 2},
+            {"source": "alpha.md", "chunk": 0, "total_chunks": 1},
+        ],
+    }
+
+    results = rag.list_indexed_documents()
+
+    assert results == [
+        {"source": "alpha.md", "chunks": 1, "total_chunks": 1},
+        {"source": "beta.md", "chunks": 2, "total_chunks": 2},
+    ]
+
+
+def test_clear_documents_deletes_all_ids(patch_rag_module):
+    _, collection = patch_rag_module
+    collection.get_result = {
+        "ids": ["a", "b", "c"],
+        "metadatas": [],
+    }
+
+    deleted_count = rag.clear_documents()
+
+    assert deleted_count == 3
+    assert collection.delete_calls == [["a", "b", "c"]]
 
 
 def test_query_documents_returns_formatted_context_with_sources(patch_rag_module):
