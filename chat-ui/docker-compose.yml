@@ -2,8 +2,9 @@ version: "3.9"
 
 services:
   vllm:
-    image: vllm/vllm-openai:nightly
+    image: vllm/vllm-openai:latest
     container_name: vllm-server
+    ipc: host
     deploy:
       resources:
         reservations:
@@ -13,11 +14,22 @@ services:
       - "8000:8000"
     volumes:
       - "G:/local-ai/vllm/cache:/root/.cache/huggingface"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
     command: >
       --model Qwen/Qwen2.5-7B-Instruct
       --dtype bfloat16
       --gpu-memory-utilization 0.70
       --max-model-len 8192
+      --host 0.0.0.0
+      --port 8000
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/models')\""]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
 
   chat-ui:
     build: .
@@ -26,9 +38,13 @@ services:
       - "8501:8501"
     volumes:
       - .:/app
-      - G:/local-ai/chroma_db:/chroma_db
+      - "G:/local-ai/docs:/docs"
+      - "G:/local-ai/chroma_db:/chroma_db"
     environment:
       - VLLM_API_BASE=http://vllm:8000/v1
       - MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
     depends_on:
-      - vllm
+      vllm:
+        condition: service_healthy
+    restart: unless-stopped

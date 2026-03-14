@@ -1,18 +1,34 @@
+# Environment variables
+.env
+
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # virtual environments
+.venv/
 venv/
+
+# Streamlit
+.streamlit/
 
 # model caches
 cache/
 models/
 vllm/
 
+# docs
+docs/
+
 # vector database
 chroma/
 chroma_db/
+
+# Docker
+*.log
+docker-compose.override.yml
 
 # OS
 .DS_Store

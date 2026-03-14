@@ -1,292 +1,275 @@
-# app.py
+import datetime
+import json
 import os
+import re
+from pathlib import Path
+
 import requests
 import streamlit as st
-from rag import add_document, query_documents
-import datetime
-import time
-import re
 from dateutil import tz
 from pypdf import PdfReader
-import io
+from rag import add_document, query_documents
 
-# Set timezone to Eastern Time (handles DST automatically)
-eastern = tz.gettz('America/New_York')
+# ================================
+# Configuration
+# ================================
 
-def render_message_with_code(content):
-    """Render message content with syntax highlighting for code blocks."""
-    # Split content by code blocks
-    parts = re.split(r'```(\w+)?\n?(.*?)\n?```', content, flags=re.DOTALL)
-    
+VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://vllm:8000/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
+
+DOCS_DIR = Path("docs")
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_CONTEXT_CHARS = 4000
+MAX_HISTORY_MESSAGES = 12
+REQUEST_TIMEOUT = 300
+
+DOCS_DIR.mkdir(exist_ok=True)
+
+eastern = tz.gettz("America/New_York")
+
+
+# ================================
+# Utility Functions
+# ================================
+
+def now_eastern() -> datetime.datetime:
+    return datetime.datetime.now(eastern)
+
+
+def render_message_with_code(content: str) -> None:
+    parts = re.split(r"```(\w+)?\n?(.*?)\n?```", content, flags=re.DOTALL)
+
+    language = ""
     for i, part in enumerate(parts):
-        if i % 3 == 0:  # Regular text
+        if i % 3 == 0:
             if part.strip():
                 st.markdown(part)
-        elif i % 3 == 1:  # Language specifier
+        elif i % 3 == 1:
             language = part or ""
-        elif i % 3 == 2:  # Code content
+        elif i % 3 == 2:
             if part.strip():
                 st.code(part, language=language if language else None)
 
-VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://host.docker.internal:8000/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 
-# Theme selection
-if "theme" not in st.session_state:
-    st.session_state.theme = "light"
+def save_uploaded_file(uploaded_file) -> Path:
+    """Save uploaded file to docs directory."""
+    file_path = DOCS_DIR / uploaded_file.name
+    file_path.write_bytes(uploaded_file.getbuffer())
+    return file_path
+
+
+def extract_text_from_pdf(file_path: Path) -> str:
+    """Extract text from a PDF file."""
+    with open(file_path, "rb") as f:
+        reader = PdfReader(f)
+
+        if reader.is_encrypted:
+            raise ValueError("PDF is password protected")
+
+        texts = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            if text.strip():
+                texts.append(text)
+
+        if not texts:
+            raise ValueError("No readable text found in PDF")
+
+        return "\n\n".join(texts)
+
+
+def extract_text(file_path: Path) -> str:
+    """Extract text from supported documents."""
+    if file_path.suffix.lower() == ".pdf":
+        return extract_text_from_pdf(file_path)
+
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read()
+
+
+def process_uploaded_file(uploaded_file) -> None:
+    """Main RAG ingestion pipeline."""
+    file_bytes = uploaded_file.getbuffer()
+    file_size = len(file_bytes)
+
+    if file_size > MAX_FILE_SIZE:
+        st.error("❌ File too large (max 10MB)")
+        return
+
+    try:
+        with st.spinner("💾 Saving document..."):
+            file_path = save_uploaded_file(uploaded_file)
+
+        with st.spinner("📄 Extracting text..."):
+            text = extract_text(file_path)
+
+        if len(text) > 100000:
+            st.warning("⚠️ Large document detected. Processing may take longer.")
+
+        with st.spinner("🧠 Generating embeddings..."):
+            add_document(text, doc_id=uploaded_file.name)
+
+        st.success(f"✅ {uploaded_file.name} added to knowledge base")
+
+    except Exception as e:
+        st.error(f"❌ Failed to process file: {e}")
+
+
+def build_api_messages(system_prompt: str, messages: list[dict]) -> list[dict]:
+    api_messages = [{"role": "system", "content": system_prompt}]
+
+    for msg in messages[-MAX_HISTORY_MESSAGES:]:
+        api_messages.append(
+            {
+                "role": msg["role"],
+                "content": msg["content"],
+            }
+        )
+
+    return api_messages
+
+
+def stream_chat_completion(payload: dict) -> str:
+    """Call vLLM OpenAI-compatible API and stream the response."""
+    full_response = ""
+
+    with requests.post(
+        f"{VLLM_API_BASE}/chat/completions",
+        json=payload,
+        stream=True,
+        timeout=REQUEST_TIMEOUT,
+    ) as response:
+        response.raise_for_status()
+
+        for line in response.iter_lines():
+            if not line:
+                continue
+
+            if not line.startswith(b"data: "):
+                continue
+
+            data = line[len(b"data: ") :]
+
+            if data == b"[DONE]":
+                break
+
+            try:
+                obj = json.loads(data.decode("utf-8"))
+                delta = obj["choices"][0]["delta"].get("content", "")
+                if delta:
+                    full_response += delta
+                    yield full_response
+            except Exception:
+                continue
+
+
+# ================================
+# Streamlit UI Setup
+# ================================
 
 st.set_page_config(page_title="Bonzo - Local AI Chat", page_icon="🐶", layout="wide")
 
-# Custom CSS for themes
-def apply_theme(theme):
-    if theme == "dark":
-        css = """
-        <style>
-        .stApp {
-            background: linear-gradient(135deg, #1e3c72, #2a5298);
-            color: white;
-        }
-        .stChatMessage, .stMarkdown {
-            background: rgba(255,255,255,0.1) !important;
-            border-radius: 10px;
-            padding: 10px;
-            margin: 5px 0;
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .stSidebar {
-            background: rgba(0,0,0,0.3);
-        }
-        .stChatMessage p, .stChatMessage div, .stChatMessage span {
-            color: white !important;
-        }
-        .stCodeBlock, .stCode {
-            background: rgba(255,255,255,0.1) !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-        }
-        .stButton>button {
-            background: #ff6b6b;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        </style>
-        """
-    else:
-        css = """
-        <style>
-        .stApp {
-            background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
-            color: #2c3e50;
-        }
-        .stChatMessage, .stMarkdown {
-            background: rgba(255,255,255,0.95) !important;
-            border-radius: 15px;
-            padding: 15px;
-            margin: 8px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .stSidebar {
-            background: rgba(255,255,255,0.98);
-            border-right: 1px solid #e1e8ed;
-            color: #2c3e50;
-        }
-        .stCheckbox label, .stSelectbox label, .stRadio label, .stTextInput label {
-            color: #2c3e50 !important;
-        }
-        .stCheckbox, .stSelectbox, .stRadio, .stTextInput {
-            color: #2c3e50 !important;
-        }
-        .stChatMessage p, .stChatMessage div, .stChatMessage span {
-            color: #2c3e50 !important;
-        }
-        .stCodeBlock, .stCode {
-            background: rgba(0,0,0,0.05) !important;
-            border: 1px solid #e1e8ed !important;
-        }
-        .stButton>button {
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            transition: background 0.3s ease;
-        }
-        .stButton>button:hover {
-            background: #2980b9;
-        }
-        .stTextInput input {
-            border-radius: 8px;
-            border: 1px solid #bdc3c7;
-        }
-        .stSidebar * {
-            color: #2c3e50 !important;
-        }
-        </style>
-        """
-    st.markdown(css, unsafe_allow_html=True)
-
-apply_theme(st.session_state.theme)
-
-st.title("🐶 Bonzo - Local AI Assistant")
-st.caption("vLLM + Streamlit + Chroma (RAG)")
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Welcome message
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = set()
+
+st.title("🐶 Bonzo - Local AI Assistant")
+st.caption("vLLM + Streamlit + Chroma (RAG)")
+
 if not st.session_state.messages:
-    st.info("🐶 **Welcome to Bonzo!** I'm your local AI assistant. Upload documents for RAG or just chat about anything!")
-
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    """Extract concatenated text from a PDF file bytes."""
-    reader = PdfReader(io.BytesIO(file_bytes))
-
-    # Check if PDF is encrypted
-    if reader.is_encrypted:
-        raise ValueError("PDF is password-protected. Please provide an unprotected PDF.")
-
-    texts = []
-    for i, page in enumerate(reader.pages):
-        try:
-            page_text = page.extract_text() or ""
-            if page_text.strip():  # Only add non-empty pages
-                texts.append(page_text)
-        except Exception as e:
-            st.warning(f"⚠️ Could not extract text from page {i+1}: {e}")
-            continue
-
-    if not texts:
-        raise ValueError("No readable text found in PDF. It may contain only images or be corrupted.")
-
-    return "\n\n".join(texts).strip()
+    st.info("🐶 **Welcome to Bonzo!** Upload documents or start chatting.")
 
 
-def process_uploaded_file(uploaded_file):
-    """Process uploaded file with progress indication."""
-    # Check file size (limit to 10MB)
-    file_size = len(uploaded_file.read())
-    uploaded_file.seek(0)  # Reset file pointer
+# ================================
+# Sidebar
+# ================================
 
-    if file_size > 10 * 1024 * 1024:  # 10MB limit
-        st.error("❌ File is too large (>10MB). Please use a smaller file.")
-        return
-
-    try:
-        # Show progress for PDF processing
-        if uploaded_file.type == "application/pdf" or uploaded_file.name.lower().endswith(".pdf"):
-            with st.spinner("📄 Processing PDF..."):
-                text = extract_text_from_pdf(uploaded_file.read())
-        else:
-            text = uploaded_file.read().decode("utf-8")
-
-        # Check text length (limit to prevent excessive processing)
-        if len(text) > 100000:  # ~100KB limit
-            st.warning(f"⚠️ Document is quite large ({len(text)} chars). Processing may take longer.")
-
-        # Show progress for embedding
-        with st.spinner("🧠 Generating embeddings..."):
-            add_document(text, doc_id=uploaded_file.name)
-
-        st.success(f"✅ Added {uploaded_file.name} to knowledge base ({len(text)} characters).")
-
-    except Exception as e:
-        st.error(f"❌ Failed to process {uploaded_file.name}: {str(e)}")
-        st.info("💡 Try a smaller file or check if the PDF is password-protected.")
-
-
-# Sidebar: document upload and theme toggle
 with st.sidebar:
-    st.header("📄 Document Upload (RAG)")
-    uploaded_file = st.file_uploader("Upload a document", type=["txt", "md", "pdf"])
+    st.header("📄 Document Upload")
+
+    uploaded_file = st.file_uploader("Upload document", type=["txt", "md", "pdf"])
+
     if uploaded_file is not None:
-        process_uploaded_file(uploaded_file)
+        file_key = f"{uploaded_file.name}:{uploaded_file.size}"
+        if file_key not in st.session_state.processed_files:
+            process_uploaded_file(uploaded_file)
+            st.session_state.processed_files.add(file_key)
 
     use_rag = st.checkbox("Use document search (RAG)", value=True)
+    show_context = st.checkbox("Show retrieved context", value=True)
 
-    st.header("🎨 Theme")
-    if st.button("Toggle Dark/Light Mode"):
-        st.session_state.theme = "dark" if st.session_state.theme == "light" else "light"
-        st.rerun()
+    st.header("🧹 Chat Controls")
 
-    st.header("� Chat Controls")
     if st.button("Clear Chat History"):
         st.session_state.messages = []
         st.rerun()
-    st.header("💾 Export")
-    if st.button("Export Chat as Markdown"):
-        chat_md = "# Bonzo Chat Export\n\n"
-        for msg in st.session_state.messages:
-            role = "Bonzo" if msg["role"] == "assistant" else "You"
-            timestamp = msg.get("timestamp", datetime.datetime.now(eastern)).strftime("%Y-%m-%d %H:%M:%S")
-            chat_md += f"**{role}** ({timestamp}):\n{msg['content']}\n\n"
-        st.download_button("Download Chat", chat_md, "bonzo_chat.md", "text/markdown")
 
     st.header("⚙️ Settings")
-    temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1, help="Controls randomness (0.0 = deterministic, 2.0 = very random)")
-    max_tokens = st.slider("Max Tokens", 100, 2048, 1024, 50, help="Maximum response length (reduce if getting context length errors)")
-    custom_system_prompt = st.text_area("System Prompt", "You are a helpful local AI assistant named Bonzo.", height=100, help="Customize Bonzo's personality")
-# Chat history
-for i, msg in enumerate(st.session_state.messages):
+
+    temperature = st.slider("Temperature", 0.0, 2.0, 0.7)
+    max_tokens = st.slider("Max Tokens", 100, 2048, 1024)
+
+    custom_system_prompt = st.text_area(
+        "System Prompt",
+        "You are a helpful local AI assistant named Bonzo. "
+        "Bonzo is a friendly energetic Australian Cattle Dog.",
+        height=100,
+    )
+
+
+# ================================
+# Chat History
+# ================================
+
+for msg in st.session_state.messages:
     avatar = "🐶" if msg["role"] == "assistant" else "👤"
+
     with st.chat_message(msg["role"], avatar=avatar):
         render_message_with_code(msg["content"])
+
         if "timestamp" in msg:
             st.caption(f"_{msg['timestamp'].strftime('%I:%M %p')}_")
-        
-        # Copy button and reactions
-        col1, col2, col3 = st.columns([1, 1, 8])
-        with col1:
-            if st.button("📋", key=f"copy_{i}", help="Copy message"):
-                st.session_state.clipboard = msg["content"]
-                st.success("Copied!", icon="✅")
-        with col2:
-            if msg["role"] == "assistant":
-                reaction_key = f"reaction_{i}"
-                if reaction_key not in st.session_state:
-                    st.session_state[reaction_key] = None
-                
-                if st.button("👍" if st.session_state[reaction_key] != "👍" else "👎", 
-                           key=f"thumbs_{i}", 
-                           help="Toggle reaction"):
-                    st.session_state[reaction_key] = "👍" if st.session_state[reaction_key] != "👍" else "👎"
-                    st.rerun()
-                
-                if st.session_state[reaction_key]:
-                    st.caption(st.session_state[reaction_key])
-        with col3:
-            if msg["role"] == "assistant" and i == len(st.session_state.messages) - 1:
-                if st.button("🔄", key=f"regenerate_{i}", help="Regenerate response"):
-                    # Remove last assistant message and regenerate
-                    st.session_state.messages.pop()
-                    st.rerun()
 
-# User input
+
+# ================================
+# User Input
+# ================================
+
 if prompt := st.chat_input("Ask something..."):
-    st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.datetime.now(eastern)})
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": prompt,
+            "timestamp": now_eastern(),
+        }
+    )
 
-    # Build system + context
     context = ""
     if use_rag:
-        context = query_documents(prompt)
-        if context:
-            system_prompt = custom_system_prompt + "\n\nUse the following context if relevant:\n" + context
-        else:
-            system_prompt = custom_system_prompt
+        try:
+            context = query_documents(prompt) or ""
+        except Exception as e:
+            st.warning(f"RAG search failed: {e}")
 
-    # Prepare OpenAI-style payload
-    # Clean messages for API (exclude timestamps)
-    api_messages = [{"role": "system", "content": system_prompt}]
-    for msg in st.session_state.messages:
-        api_messages.append({"role": msg["role"], "content": msg["content"]})
-    
+    if context and show_context:
+        with st.expander("Retrieved context"):
+            st.text(context[:MAX_CONTEXT_CHARS])
+
+    if context:
+        system_prompt = (
+            f"{custom_system_prompt}\n\n"
+            f"Use the following context if relevant:\n{context[:MAX_CONTEXT_CHARS]}"
+        )
+    else:
+        system_prompt = custom_system_prompt
+
+    api_messages = build_api_messages(system_prompt, st.session_state.messages)
+
     payload = {
         "model": MODEL_NAME,
         "temperature": temperature,
@@ -295,44 +278,29 @@ if prompt := st.chat_input("Ask something..."):
         "stream": True,
     }
 
-    with st.chat_message("assistant"):
-        # Typing indicator
-        typing_placeholder = st.empty()
-        with typing_placeholder.container():
-            col1, col2 = st.columns([1, 10])
-            with col1:
-                st.write("🐶")
-            with col2:
-                typing_text = st.empty()
-                for i in range(3):
-                    typing_text.write("Bonzo is typing" + "." * (i + 1))
-                    time.sleep(0.5)
-                typing_text.write("Bonzo is typing...")
-        
+    with st.chat_message("assistant", avatar="🐶"):
         placeholder = st.empty()
         full_response = ""
 
-        with requests.post(f"{VLLM_API_BASE}/chat/completions", json=payload, stream=True) as r:
-            for line in r.iter_lines():
-                if not line:
-                    continue
-                if line.startswith(b"data: "):
-                    data = line[len(b"data: "):]
-                    if data == b"[DONE]":
-                        break
-                    try:
-                        chunk = data.decode("utf-8")
-                        import json
-                        obj = json.loads(chunk)
-                        delta = obj["choices"][0]["delta"].get("content", "")
-                        if delta:
-                            full_response += delta
-                            placeholder.markdown(full_response)
-                    except Exception:
-                        continue
+        try:
+            for partial_response in stream_chat_completion(payload):
+                full_response = partial_response
+                placeholder.markdown(full_response)
 
-        # Clear typing indicator and show final message
-        typing_placeholder.empty()
-        placeholder.markdown(full_response)
+        except requests.exceptions.RequestException as e:
+            full_response = f"❌ Failed to connect to model server: {e}"
+            placeholder.error(full_response)
+        except Exception as e:
+            full_response = f"❌ Unexpected error: {e}"
+            placeholder.error(full_response)
 
-        st.session_state.messages.append({"role": "assistant", "content": full_response, "timestamp": datetime.datetime.now(eastern)})
+        if full_response.strip():
+            placeholder.markdown(full_response)
+
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": full_response,
+                    "timestamp": now_eastern(),
+                }
+            )
