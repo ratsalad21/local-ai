@@ -43,7 +43,7 @@ DEFAULT_TOP_K = 20
 DEFAULT_PRESENCE_PENALTY = 1.5
 DEFAULT_ENABLE_THINKING = False
 MIN_OUTPUT_TOKENS = 64
-DEFAULT_OUTPUT_TOKENS = 256
+DEFAULT_OUTPUT_TOKENS = 512
 APPROX_CHARS_PER_TOKEN = 4
 
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -450,7 +450,7 @@ def build_retrieval_system_prompt(base_prompt: str, context: str) -> str:
     )
 
 
-def stream_chat_completion(payload: dict[str, Any]):
+def stream_chat_completion(payload: dict[str, Any], stream_state: dict[str, Any] | None = None):
     full_response = ""
 
     with requests.post(
@@ -471,7 +471,13 @@ def stream_chat_completion(payload: dict[str, Any]):
 
             try:
                 obj = json.loads(data.decode("utf-8"))
-                delta = obj["choices"][0]["delta"].get("content", "")
+                choice = obj["choices"][0]
+                delta = choice["delta"].get("content", "")
+                finish_reason = choice.get("finish_reason")
+
+                if finish_reason and stream_state is not None:
+                    stream_state["finish_reason"] = finish_reason
+
                 if delta:
                     full_response += delta
                     yield full_response
@@ -672,7 +678,7 @@ with st.sidebar:
     max_tokens = st.slider(
         "Max Tokens",
         MIN_OUTPUT_TOKENS,
-        min(512, max(MIN_OUTPUT_TOKENS, VLLM_MAX_MODEL_LEN // 2)),
+        min(1024, max(MIN_OUTPUT_TOKENS, VLLM_MAX_MODEL_LEN // 2)),
         min(DEFAULT_OUTPUT_TOKENS, max(MIN_OUTPUT_TOKENS, VLLM_MAX_MODEL_LEN // 3)),
     )
     custom_system_prompt = st.text_area(
@@ -767,9 +773,10 @@ if prompt := st.chat_input("Ask something..."):
     with st.chat_message("assistant", avatar="🐶"):
         placeholder = st.empty()
         full_response = ""
+        stream_state: dict[str, Any] = {}
 
         try:
-            for partial_response in stream_chat_completion(payload):
+            for partial_response in stream_chat_completion(payload, stream_state=stream_state):
                 full_response = partial_response
                 placeholder.markdown(full_response)
         except requests.exceptions.RequestException as e:
@@ -781,6 +788,8 @@ if prompt := st.chat_input("Ask something..."):
 
         if full_response.strip():
             placeholder.markdown(full_response)
+            if stream_state.get("finish_reason") == "length":
+                st.caption("Response stopped because it reached the current max token limit. Increase `Max Tokens` or ask Bonzo to continue.")
             if sources:
                 st.caption("Sources: " + ", ".join(sources))
 

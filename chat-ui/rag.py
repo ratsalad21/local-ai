@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from typing import Any, List, Optional
 
 import chromadb
@@ -64,6 +65,79 @@ def _similarity_from_distance(distance: Optional[float]) -> Optional[float]:
     if distance is None:
         return None
     return max(0.0, min(1.0, 1.0 - (distance / 2.0)))
+
+
+def _normalize_lookup_text(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _source_match_score(query: str, source: str) -> int:
+    normalized_query = _normalize_lookup_text(query)
+    normalized_source = _normalize_lookup_text(source)
+
+    if not normalized_query or not normalized_source:
+        return 0
+
+    if normalized_source in normalized_query:
+        return 3
+
+    source_tokens = [token for token in normalized_source.split() if len(token) > 2]
+    if not source_tokens:
+        return 0
+
+    matched_tokens = sum(1 for token in source_tokens if token in normalized_query)
+    if matched_tokens == len(source_tokens):
+        return 2
+    if matched_tokens > 0:
+        return 1
+    return 0
+
+
+def _filename_matches(
+    query: str,
+    max_per_source: int,
+) -> List[dict[str, Any]]:
+    assert collection is not None
+
+    results = collection.get(include=["documents", "metadatas"])
+    docs = results.get("documents", []) or []
+    metadatas = results.get("metadatas", []) or []
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for index, doc in enumerate(docs):
+        metadata = metadatas[index] if index < len(metadatas) and metadatas[index] else {}
+        source = metadata.get("source")
+        if not source:
+            continue
+
+        grouped.setdefault(source, []).append(
+            {
+                "source": source,
+                "chunk": metadata.get("chunk", -1),
+                "total_chunks": metadata.get("total_chunks"),
+                "text": doc,
+                "distance": None,
+                "similarity": None,
+            }
+        )
+
+    matched_sources = sorted(
+        (
+            (source, _source_match_score(query, source))
+            for source in grouped
+        ),
+        key=lambda item: (-item[1], item[0].lower()),
+    )
+
+    matches: List[dict[str, Any]] = []
+    for source, score in matched_sources:
+        if score <= 0:
+            continue
+
+        source_chunks = sorted(grouped[source], key=lambda item: item.get("chunk", -1))
+        matches.extend(source_chunks[:max_per_source])
+
+    return matches
 
 
 # ================================
@@ -221,6 +295,8 @@ def search_documents(
     if not query.strip():
         return []
 
+    filename_matches = _filename_matches(query, max_per_source=max_per_source)
+
     q_emb = embedder.encode(
         [query],
         show_progress_bar=False,
@@ -244,6 +320,21 @@ def search_documents(
     matches: List[dict[str, Any]] = []
     seen_keys: set[tuple[str, int, str]] = set()
     per_source_counts: dict[str, int] = {}
+
+    for match in filename_matches:
+        dedupe_key = (match["source"], match["chunk"], match["text"])
+        if dedupe_key in seen_keys:
+            continue
+
+        if per_source_counts.get(match["source"], 0) >= max_per_source:
+            continue
+
+        seen_keys.add(dedupe_key)
+        per_source_counts[match["source"]] = per_source_counts.get(match["source"], 0) + 1
+        matches.append(match)
+
+        if len(matches) >= k:
+            return matches
 
     for i, doc in enumerate(docs):
         metadata = metadatas[i] if i < len(metadatas) and metadatas[i] else {}
