@@ -189,7 +189,7 @@ The app currently uses these environment variables:
 The vLLM service is also configured with:
 
 - `--dtype bfloat16`
-- `--gpu-memory-utilization 0.95`
+- `--gpu-memory-utilization 0.90`
 - `--max-model-len 16384`
 - `--max-num-batched-tokens 16384`
 - `--max-num-seqs 16`
