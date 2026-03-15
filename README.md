@@ -80,6 +80,39 @@ Retrieved chunks are shown with source-aware cards so you can see what context t
 
 ## Quick Start
 
+### Before First Launch
+
+From [`chat-ui`](./chat-ui):
+
+1. Create a local env file from the example:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Open `.env` and set `HUGGING_FACE_HUB_TOKEN`.
+
+This token is recommended for first-time Hugging Face downloads and required if you later switch to a gated or private model.
+
+3. Confirm the bind-mounted Windows paths in `chat-ui/docker-compose.yml` match your machine:
+
+- `G:/local-ai/vllm/cache`
+- `G:/local-ai/docs`
+- `G:/local-ai/chroma_db`
+- `G:/local-ai/chat_history`
+
+4. Confirm Docker can use the GPU and the host paths.
+
+See [Windows Docker Desktop Setup](#windows-docker-desktop-setup) below for the file-sharing and GPU passthrough checks.
+
+5. Make sure ports `8000` and `8501` are free on the host.
+
+6. Expect the first startup to take longer than normal.
+
+The first boot may need to pull Docker images, download the main LLM, download the embedding model, and warm up the vLLM server. Make sure the machine has internet access and enough free disk space under `vllm/cache/`.
+
+### Start The Stack
+
 From [`chat-ui`](./chat-ui):
 
 ```bash
@@ -91,6 +124,45 @@ Then open:
 ```text
 http://localhost:8501
 ```
+
+### Windows Docker Desktop Setup
+
+This stack assumes Docker Desktop on Windows can do two things before first launch:
+
+- mount the repo's host folders into the containers
+- expose the NVIDIA GPU to the `vllm` container
+
+#### 1. Allow Docker to mount the local folders
+
+The compose file currently bind-mounts these Windows paths:
+
+- `G:/local-ai/vllm/cache`
+- `G:/local-ai/docs`
+- `G:/local-ai/chroma_db`
+- `G:/local-ai/chat_history`
+
+In Docker Desktop:
+
+1. Open `Settings`.
+2. Go to the current file-sharing or bind-mount settings page. On many installs this is under `Resources` -> `File Sharing`.
+3. Add `G:\local-ai` or share the parent drive/folder that contains this repo.
+4. Apply the change and restart Docker Desktop if prompted.
+5. If your repo lives somewhere else, update the host-side paths in `chat-ui/docker-compose.yml` to match that machine.
+
+If startup fails with a mount-denied or path-sharing error, this is usually the first setting to check.
+
+#### 2. Enable GPU passthrough for vLLM
+
+The compose file already requests a GPU for the `vllm` service, so Docker Desktop still needs working NVIDIA passthrough on the host.
+
+Checklist:
+
+- enable the Docker Desktop WSL 2 engine
+- install an NVIDIA Windows driver with WSL support
+- confirm your WSL environment can see the GPU with `nvidia-smi`
+- confirm Docker can see the GPU with `docker run --rm --gpus all nvidia/cuda:12.3.2-base-ubuntu22.04 nvidia-smi`
+
+If the test container cannot see the GPU, fix Docker, WSL, or driver access first and then start the stack.
 
 ### When To Rebuild
 
@@ -289,6 +361,8 @@ Common issues:
 - token errors usually mean the request exceeds the active model context window
 - slow first boot is often normal because model loading and compile warmup take time
 - path issues usually come from machine-specific Windows mounts in `docker-compose.yml`
+- mount-denied errors usually mean Docker Desktop is not sharing the host path used in the bind mount
+- missing GPU errors usually mean Docker passthrough, WSL GPU access, or the NVIDIA driver is not ready yet
 
 For detailed troubleshooting steps, see [`docs/PROJECT_GUIDE.md`](./docs/PROJECT_GUIDE.md).
 
