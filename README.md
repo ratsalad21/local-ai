@@ -168,6 +168,22 @@ If the test container cannot see the GPU, fix Docker, WSL, or driver access firs
 
 Use `docker compose up` for normal day-to-day startup. The `chat-ui` service bind-mounts the local source tree into `/app`, so most Python code changes do not require rebuilding the image.
 
+In `chat-ui/docker-compose.yml`, the mount:
+
+```yaml
+- .:/app
+```
+
+maps your local `chat-ui` folder into the running container. That means when you edit UI files such as `app.py`, `sidebar.py`, `ui.py`, or `chat_flow.py` on the host, the container sees those file changes immediately instead of waiting for a new image build.
+
+For normal UI development, the workflow is:
+
+1. start the stack with `docker compose up`
+2. edit the Streamlit app files locally
+3. refresh the browser or let Streamlit pick up the change automatically
+
+This is what makes the UI feel live during development: you are editing the mounted app source, not a copy baked into the image.
+
 Use `docker compose up --build` when you change:
 
 - [`chat-ui/dockerfile`](./chat-ui/dockerfile)
