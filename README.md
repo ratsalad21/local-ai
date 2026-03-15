@@ -83,7 +83,7 @@ Retrieved chunks are shown with source-aware cards so you can see what context t
 From [`chat-ui`](./chat-ui):
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
 Then open:
@@ -91,6 +91,16 @@ Then open:
 ```text
 http://localhost:8501
 ```
+
+### When To Rebuild
+
+Use `docker compose up` for normal day-to-day startup. The `chat-ui` service bind-mounts the local source tree into `/app`, so most Python code changes do not require rebuilding the image.
+
+Use `docker compose up --build` when you change:
+
+- [`chat-ui/dockerfile`](./chat-ui/dockerfile)
+- [`chat-ui/requirements.txt`](./chat-ui/requirements.txt)
+- anything else that affects the built image rather than the live-mounted app code
 
 ## Architecture
 
