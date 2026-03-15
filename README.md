@@ -107,16 +107,19 @@ Use `docker compose up --build` when you change:
 ```text
 Browser
   -> Streamlit app (chat-ui/app.py)
+      -> app_state.py initializes Streamlit session state
+      -> sidebar.py renders controls and settings
+      -> ui.py renders chrome and chat history
+      -> chat_flow.py handles each prompt/response cycle
       -> vLLM API (/v1/chat/completions, /v1/models)
           -> local Qwen model on GPU
 
 Optional retrieval flow:
 uploaded file
-  -> saved under docs/
-  -> parsed by the Streamlit app
+  -> saved and parsed by chat-ui/documents.py
   -> chunked and embedded in chat-ui/rag.py
   -> stored in chroma_db/
-  -> retrieved context added to the prompt
+  -> retrieved context added to the prompt by chat-ui/chat_flow.py
 ```
 
 ## Current Setup
@@ -158,8 +161,16 @@ It is the better fit for this machine because it gives:
 
 | Path | Purpose |
 | --- | --- |
-| `chat-ui/app.py` | main Streamlit application |
+| `chat-ui/app.py` | thin Streamlit entrypoint |
+| `chat-ui/app_state.py` | Streamlit session-state initialization |
+| `chat-ui/chat_flow.py` | prompt handling, retrieval orchestration, and streamed responses |
+| `chat-ui/config.py` | shared app configuration and constants |
+| `chat-ui/documents.py` | document upload, parsing, preview, and re-indexing helpers |
+| `chat-ui/llm.py` | model status checks, prompt budgeting, and streaming helpers |
 | `chat-ui/rag.py` | chunking, embeddings, retrieval, Chroma integration |
+| `chat-ui/sessions.py` | chat session persistence and timestamps |
+| `chat-ui/sidebar.py` | sidebar controls and settings UI |
+| `chat-ui/ui.py` | top-level UI rendering helpers |
 | `chat-ui/docker-compose.yml` | local two-service stack |
 | `chat-ui/dockerfile` | Streamlit container build |
 | `chat-ui/tests/test_rag.py` | RAG tests |
@@ -174,7 +185,15 @@ It is the better fit for this machine because it gives:
 local-ai/
 |-- chat-ui/
 |   |-- app.py
+|   |-- app_state.py
+|   |-- chat_flow.py
+|   |-- config.py
+|   |-- documents.py
+|   |-- llm.py
 |   |-- rag.py
+|   |-- sessions.py
+|   |-- sidebar.py
+|   |-- ui.py
 |   |-- docker-compose.yml
 |   |-- dockerfile
 |   |-- requirements.txt
@@ -223,20 +242,20 @@ If you move the repo or run it on another machine, these are the first paths to 
 ### Chat flow
 
 1. The user enters a prompt in the browser.
-2. The Streamlit app builds a request from the system prompt, recent history, and optional retrieved context.
-3. The app trims request size to fit the configured context budget.
+2. [`chat-ui/chat_flow.py`](./chat-ui/chat_flow.py) records the user message and optionally runs retrieval.
+3. [`chat-ui/llm.py`](./chat-ui/llm.py) trims request size to fit the configured context budget.
 4. The request is sent to vLLM.
 5. vLLM streams tokens back to the UI.
-6. The final response is stored in `chat_history/`.
+6. [`chat-ui/sessions.py`](./chat-ui/sessions.py) saves the final response to `chat_history/`.
 
 ### RAG flow
 
 1. A document is uploaded in the sidebar.
-2. The app saves it to `docs/`.
-3. Text is extracted and chunked.
+2. [`chat-ui/documents.py`](./chat-ui/documents.py) saves it to `docs/` and extracts text.
+3. [`chat-ui/rag.py`](./chat-ui/rag.py) chunks and embeds the document.
 4. Embeddings are created and stored in Chroma.
 5. Matching chunks are retrieved during chat.
-6. The retrieved context is added to the prompt.
+6. [`chat-ui/chat_flow.py`](./chat-ui/chat_flow.py) adds the retrieved context to the prompt.
 
 ## Hardware Notes
 
