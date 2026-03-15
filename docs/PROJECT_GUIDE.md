@@ -61,43 +61,56 @@ This project is designed to run on a single machine with Docker and an NVIDIA GP
 ```text
 Browser
   -> Streamlit app (chat-ui/app.py)
+      -> app_state.py initializes Streamlit session state
+      -> sidebar.py renders controls and settings
+      -> ui.py renders chrome and chat history
+      -> chat_flow.py handles each prompt/response cycle
       -> vLLM HTTP API (/v1/chat/completions, /v1/models)
           -> Qwen model running on GPU
 
 Optional RAG flow:
 uploaded file
   -> saved to docs/
-  -> parsed by chat-ui/app.py
+  -> parsed by chat-ui/documents.py
   -> chunked + embedded by chat-ui/rag.py
   -> stored in chroma_db/
   -> retrieved during chat
-  -> appended to the system prompt
+  -> appended to the system prompt by chat-ui/chat_flow.py
 ```
 
 ## Main Components
 
 | Component | Main File | Purpose |
 | --- | --- | --- |
-| Streamlit UI | `chat-ui/app.py` | Chat interface, session state, uploads, prompt building |
+| Streamlit entrypoint | `chat-ui/app.py` | Thin top-level app wiring for state, UI, and chat handling |
+| App state | `chat-ui/app_state.py` | Streamlit session-state initialization |
+| Chat flow | `chat-ui/chat_flow.py` | Prompt handling, retrieval orchestration, and streamed replies |
+| UI helpers | `chat-ui/ui.py` | App chrome, chat history rendering, retrieval display |
+| Sidebar UI | `chat-ui/sidebar.py` | Sidebar controls, document actions, and runtime settings |
+| Session storage | `chat-ui/sessions.py` | Chat session persistence and timestamps |
+| Document handling | `chat-ui/documents.py` | Upload, parsing, preview, search, and re-index helpers |
+| LLM helpers | `chat-ui/llm.py` | Model status checks, prompt budgeting, and streaming helpers |
 | vLLM server | `chat-ui/docker-compose.yml` | Model serving, OpenAI-compatible API, GPU inference |
 | RAG layer | `chat-ui/rag.py` | Chunking, embeddings, Chroma indexing and retrieval |
 | Runtime storage | `docs/`, `chroma_db/`, `chat_history/`, `vllm/cache/` | Persisted documents, vectors, sessions, and model cache |
 
-### 1. Streamlit Chat UI
+### 1. Streamlit Application
 
-File:
+Files:
 
 - `chat-ui/app.py`
+- `chat-ui/app_state.py`
+- `chat-ui/chat_flow.py`
+- `chat-ui/sidebar.py`
+- `chat-ui/ui.py`
 
 Responsibilities:
 
-- renders the browser UI
-- shows model/server status
-- manages saved chat sessions
-- uploads and manages documents
-- builds prompts and request payloads
-- streams model responses from vLLM
-- trims history and output token requests to fit the model context budget
+- initializes Streamlit session state
+- renders the browser UI and sidebar controls
+- handles prompt submission and streamed assistant replies
+- displays model/server status and saved chat history
+- coordinates prompt building, retrieval display, and chat persistence
 
 ### 2. vLLM Model Server
 
@@ -148,7 +161,15 @@ Responsibilities:
 local-ai/
 |-- chat-ui/
 |   |-- app.py
+|   |-- app_state.py
+|   |-- chat_flow.py
+|   |-- config.py
+|   |-- documents.py
+|   |-- llm.py
 |   |-- rag.py
+|   |-- sessions.py
+|   |-- sidebar.py
+|   |-- ui.py
 |   |-- docker-compose.yml
 |   |-- dockerfile
 |   |-- requirements.txt
@@ -173,21 +194,21 @@ local-ai/
 ### Normal Chat
 
 1. The user sends a prompt in the Streamlit UI.
-2. The app adds recent chat history.
-3. The app applies token budgeting so the request fits the current context window.
-4. The app sends a streaming request to `vLLM_API_BASE + /chat/completions`.
+2. `chat-ui/chat_flow.py` records the user message and gathers optional retrieval context.
+3. `chat-ui/llm.py` applies token budgeting so the request fits the current context window.
+4. The app sends a streaming request to `VLLM_API_BASE + /chat/completions`.
 5. vLLM generates tokens on the GPU.
 6. The UI streams the partial output to the browser.
-7. The final reply is saved to `chat_history/`.
+7. `chat-ui/sessions.py` saves the final reply to `chat_history/`.
 
 ### Chat With RAG
 
 1. The user uploads `txt`, `md`, or `pdf` files.
-2. The app saves them to `docs/`.
-3. The text is extracted and chunked.
+2. `chat-ui/documents.py` saves them to `docs/` and extracts text.
+3. `chat-ui/rag.py` chunks and embeds the extracted text.
 4. Embeddings are generated and stored in Chroma.
 5. On chat, the app searches the vector store for relevant chunks.
-6. Retrieved context is inserted into the system prompt.
+6. `chat-ui/chat_flow.py` inserts retrieved context into the system prompt.
 7. The model responds with that context available.
 
 ## Current Runtime Configuration
@@ -256,7 +277,7 @@ If you move the repo or run it on another machine, these are the first paths to 
 From `g:\local-ai\chat-ui`:
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
 Then open:
@@ -264,6 +285,12 @@ Then open:
 ```text
 http://localhost:8501
 ```
+
+Use `docker compose up --build` when you change the image itself, such as:
+
+- `chat-ui/dockerfile`
+- `chat-ui/requirements.txt`
+- other build-time dependencies rather than the live-mounted app code
 
 ## How To Restart The Stack
 
@@ -287,7 +314,7 @@ docker compose up -d chat-ui
 
 ## How The UI Prevents Token Errors
 
-The app now includes token-budget logic in `chat-ui/app.py`.
+The app now includes token-budget logic in `chat-ui/llm.py`, orchestrated by `chat-ui/chat_flow.py`.
 
 It does three important things:
 
@@ -370,7 +397,7 @@ RAG controls in the UI:
 If you want to change the model or machine layout, update these first:
 
 1. `chat-ui/docker-compose.yml`
-2. `chat-ui/app.py` defaults only if you want code-level fallback changes
+2. `chat-ui/config.py` if you want code-level fallback changes
 3. `README.md` or this guide if you want docs to match
 
 When changing models, review:
@@ -599,7 +626,14 @@ nvidia-smi
 ### Most important files
 
 - `chat-ui/app.py`
+- `chat-ui/chat_flow.py`
+- `chat-ui/config.py`
+- `chat-ui/documents.py`
+- `chat-ui/llm.py`
 - `chat-ui/rag.py`
+- `chat-ui/sessions.py`
+- `chat-ui/sidebar.py`
+- `chat-ui/ui.py`
 - `chat-ui/docker-compose.yml`
 - `README.md`
 - `docs/PROJECT_GUIDE.md`
